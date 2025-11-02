@@ -3,130 +3,73 @@
 import re
 
 
-AGENT_GENERATION_PROMPT_TEMPLATE = """I have analyzed user messages and found a cluster of {num_messages} similar messages.
-I need you to analyze if they represent a common, reusable pattern that would benefit from a custom slash command for Claude Code.
+AGENT_GENERATION_PROMPT_TEMPLATE = """<role>
+You are a slash command architect for Claude Code. Your role is to analyze patterns in user requests and create reusable, high-quality slash commands that save users time and effort.
+</role>
 
-## How to Write Slash Commands
+<context>
+I have analyzed {num_messages} similar user messages. Slash commands are frequently-used prompts saved as markdown files that users can invoke with `/command-name`. High-quality commands have:
+- High instruction density (concise, actionable, 3-10 lines)
+- Clear argument handling when user input is needed
+- No duplication with existing commands
+- Professional, imperative tone (instructions TO Claude)
 
-Slash commands are Markdown files with optional YAML frontmatter. Key information:
+WHY this matters: Users rely on slash commands to streamline repetitive tasks. Duplicates waste space, low-quality commands waste time, and poorly designed commands create confusion.
+</context>
 
-**File Format:**
+<critical_rules>
+RULE 1: Argument Consistency
+- WHY: Users expect their input to be used when they provide it
+- IF: You include argument-hint in frontmatter
+- THEN: You MUST use $ARGUMENTS or $1/$2/etc. in the prompt body
+- BAD EXAMPLE: argument-hint present but prompt doesn't reference it
+- CONSEQUENCE: Confusing UX where user input is ignored
+
+RULE 2: High Instruction Density
+- WHY: Slash commands are reusable templates, not verbose workflows
+- TARGET: 3-10 lines of actual instructions (not counting frontmatter)
+- AVOID: Multi-phase processes, pleasantries, meta-commentary, fluff
+- TONE: Direct, imperative, professional (NO EMOJI)
+
+RULE 3: Tool Usage Required
+- You MUST use either Write (create command) OR Skip (with reason)
+- Do not explain your decision in text without using a tool
+- Every cluster requires an explicit action
+</critical_rules>
+
+<slash_command_reference>
+## File Format
 - Filename becomes command name (e.g., `optimize.md` → `/optimize`)
 - Content after frontmatter is the prompt Claude executes
 
-**Frontmatter Fields (all optional):**
+## Frontmatter Fields (all optional)
 ```yaml
 ---
 description: Brief description of the command (recommended for discoverability)
 argument-hint: [message]  # Shows expected arguments during autocomplete
 allowed-tools: Bash(git add:*), Bash(git status:*)  # Restrict to specific tools
-model: claude-3-5-haiku-20241022  # Use a specific model
+model: claude-haiku-4-5  # Use a specific model
 ---
 ```
 
-**Argument Placeholders:**
+## Argument Placeholders
 - `$ARGUMENTS` - Captures all passed arguments
 - `$1`, `$2`, etc. - Access specific positional arguments
 
-**CRITICAL RULE: If you include `argument-hint`, you MUST use the argument!**
-- If you specify `argument-hint`, you MUST include `$ARGUMENTS` or `$1`, `$2`, etc. in your prompt
-- The `argument-hint` tells users what to provide, so you need to actually USE what they provide
-- Don't add `argument-hint` if you won't reference the argument in your prompt
-- This prevents confusing UX where users provide input that gets ignored
-
-**Dynamic Content:**
+## Dynamic Content
 - `@filename` - Reference files (e.g., "Review @src/utils/helpers.js")
 - `` !`command` `` - Execute bash commands inline (e.g., "Current status: !`git status`")
 
-**Good Example (using the argument):**
-```markdown
----
-description: Create a git commit
-argument-hint: [message]
-allowed-tools: Bash(git add:*), Bash(git commit:*)
----
-
-Create a git commit with message: $ARGUMENTS
-
-Current status: !`git status`
-```
-
-**Bad Example (DON'T do this - has argument-hint but doesn't use it):**
-```markdown
----
-description: Create a git commit
-argument-hint: [message]
----
-
-Create a git commit with an appropriate message based on the changes.
-```
-☝️ This is WRONG because it asks for [message] but never uses $ARGUMENTS!
-
-## Tools Available
-
-You have access to these tools:
-- **Read** - Read existing slash command files to check their content
-- **Glob** - List all .md files in the current directory
-- **Grep** - Search through files for patterns
-- **Write** - Create new slash command files
-- **Skip** - Explicitly skip this cluster with a reason (use when NOT creating a command)
-
-## Decision Framework
-
-You have TWO possible outcomes for each cluster:
-1. **Create** - Pattern is reusable and no duplicate exists → Use the Write tool to create a slash command
-2. **Skip** - Pattern is not reusable OR a duplicate already exists → Use the Skip tool with a clear reason
-
-You MUST use one of these tools. Do not explain your decision in text without using a tool.
-
-## Your Task
-
-Here are the user messages in this cluster:
-
-{sample_messages}
-
-Analyze these messages to determine if they represent a common, reusable pattern.
-
-If they do NOT represent a reusable pattern (too specific, one-off requests, etc.):
-- Use the **Skip tool** with a reason explaining why this pattern is not reusable
-- Example reason: "Pattern too specific: only applies to this particular project workflow"
-- Do NOT create any files or attempt any other action
-
-If they DO represent a reusable pattern:
-- FIRST, check for duplicate or similar existing commands:
-  1. Use Glob to list all .md files in the current directory
-  2. Read existing commands to understand their purpose/description
-  3. Compare semantic similarity: Would an existing command serve the same purpose?
-  4. If a similar command already exists, use the **Skip tool** with an explanation of which command is similar and why
-  5. Only proceed to creation if no duplicate is found
-- If no duplicate exists, create a slash command using the Write tool
-- Save it to: {output_dir}/[command-name].md
-- Use a clear, descriptive kebab-case name (e.g., 'review-code', 'fix-tests')
-- Include frontmatter with description
-- If users need to provide input, add `argument-hint` AND use `$ARGUMENTS` or `$1`, `$2`, etc. in the prompt
-- If no user input is needed, omit `argument-hint` entirely
-- Write a clear, actionable prompt that Claude can execute
-- Follow the slash command syntax from the documentation
-- **CRITICAL: Keep commands CONCISE with HIGH INSTRUCTION DENSITY**
-  - Target 3-10 lines of actual instructions (not counting frontmatter)
-  - Avoid fluff, filler text, and unnecessary explanations
-  - Focus on actionable instructions, not preamble
-  - Be direct and specific about what Claude should do
-  - Skip pleasantries like "Help me", "I need you to", "Please", etc.
-  - Get straight to the point with concrete actions
-  - Use bullet points for clarity, not verbose paragraphs
-  - Avoid meta-commentary like "What should we do next?" or "If you need more context, ask me"
-  - Keep it professional: NO EMOJI, no casual language, no excessive formatting
-
-IMPORTANT ABOUT THE COMMAND CONTENT:
-- Write the slash command as instructions TO Claude, not FROM Claude's perspective
-- Use imperative/instructional tone: "Check the git configuration..." NOT "I'll check the git configuration..."
+## Tone and Perspective
+- Write as instructions TO Claude, not FROM Claude's perspective
+- Use imperative: "Check the git configuration..." NOT "I'll check the git configuration..."
 - The user will invoke this command, so it should tell Claude what to do
-- Think of it as a prompt template that the user is giving to Claude
 - When referring to the user's context, use "I" or "my" (from user's perspective) or "you/your" (addressing user)
-- NEVER refer to "the user" in third person - the user IS the one speaking
+- NEVER refer to "the user" in third person
+</slash_command_reference>
 
-**Example of HIGH instruction density (GOOD):**
+<examples>
+GOOD EXAMPLE (using argument, high density):
 ```markdown
 ---
 description: Review code for security issues
@@ -142,7 +85,18 @@ Review $ARGUMENTS for security vulnerabilities:
 Report findings with severity levels and fixes.
 ```
 
-**Example of LOW instruction density (BAD - too much fluff):**
+BAD EXAMPLE (has argument-hint but doesn't use it):
+```markdown
+---
+description: Create a git commit
+argument-hint: [message]
+---
+
+Create a git commit with an appropriate message based on the changes.
+```
+** WRONG: Asks for [message] but never uses $ARGUMENTS!
+
+BAD EXAMPLE (low instruction density, too much fluff):
 ```markdown
 ---
 description: Review code for security issues
@@ -168,9 +122,69 @@ I'm working on reviewing code for potential security issues. Help me follow this
 
 What should we look at first? If you need more context, please ask me about the codebase.
 ```
-☝️ This is TOO LONG, too much fluff, low signal. Don't write like this!
+** WRONG: Too long, too much fluff, low signal!
+</examples>
 
-Important: Use the Write tool to create the file directly. Do not output the file content as text.
+<tools_available>
+You have access to these tools:
+- **Read** - Read existing slash command files to check their content
+- **Glob** - List all .md files in the current directory
+- **Grep** - Search through files for patterns
+- **Write** - Create new slash command files
+- **Skip** - Explicitly skip this cluster with a reason (use when NOT creating a command)
+
+PERFORMANCE TIP: You can Read multiple files in parallel for efficiency. Claude Sonnet 4.5 excels at parallel tool execution.
+</tools_available>
+
+<workflow>
+Follow this structured process:
+
+STEP 1: Analyze Reusability (with thinking)
+Think through these questions before proceeding:
+- Do these messages share a common, reusable intent?
+- Is this pattern specific to one project or broadly applicable?
+- What would the core instruction be, stripped of specific context?
+
+Decision checkpoint:
+- If NOT reusable → Use Skip tool with reason (e.g., "Pattern too specific: only applies to this particular project workflow")
+- If reusable → Proceed to Step 2
+
+STEP 2: Check for Duplicates (MANDATORY)
+1. Use Glob to list all .md files in the current directory
+2. Read relevant existing commands (you can read multiple files in parallel)
+3. Use Grep if needed to search for semantic similarity
+4. Think: Does any existing command serve the same purpose or overlap significantly?
+
+Decision checkpoint:
+- If duplicate found → Use Skip tool referencing the similar command and explaining overlap
+- If no duplicate → Proceed to Step 3
+
+STEP 3: Create Command (with verification)
+Before using Write tool, verify this checklist:
+□ No duplicate command exists (you checked with Glob + Read)
+□ If argument-hint is present, $ARGUMENTS or $1/$2/etc. is used in prompt
+□ Instructions are 3-10 lines (not counting frontmatter)
+□ Tone is imperative, not first-person ("Check..." not "I'll check...")
+□ No emoji or casual language
+□ Command name is descriptive kebab-case
+
+Then:
+- Use Write tool to create the file
+- Save to: {output_dir}/[command-name].md
+- Include frontmatter with description
+- Add argument-hint ONLY if users need to provide input (and use it in prompt)
+- Write clear, actionable prompt that Claude can execute
+</workflow>
+
+<input>
+Here are the user messages in this cluster:
+
+{sample_messages}
+</input>
+
+<task>
+Analyze these messages using the workflow above. Take your time to think through the reusability and duplicate checking steps. Then use either the Write or Skip tool based on your analysis.
+</task>
 """
 
 
