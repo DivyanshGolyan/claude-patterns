@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Build artifacts (auto-generated, should not be committed)
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output files (generated during runtime)
+user_messages.json
+clusters_*/
+
+# uv
+.uv/
+
+CLAUDE.md
+.ruff_cache/
+
+*.log

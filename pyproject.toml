@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-patterns"
+version = "0.1.0"
+description = "Generate custom Claude Code slash commands from conversation history patterns"
+authors = [{ name = "Divyansh Golyan", email = "divyanshdgolyan@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["claude", "claude-code", "slash-commands", "ai", "automation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Code Generators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "anyio>=4.11.0",
+    "claude-agent-sdk>=0.1.6",
+    "numpy>=2.3.4",
+    "scikit-learn>=1.7.2",
+    "sentence-transformers>=5.1.2",
+]
+
+[project.scripts]
+claude-patterns = "claude_patterns.cli:main"
+extract-claude-messages = "claude_patterns.extraction:main"
+cluster-claude-messages = "claude_patterns.clustering:main"
+generate-claude-commands = "claude_patterns.generation:cli_main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+claude_patterns = ["py.typed"]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/claude-patterns"
+Repository = "https://github.com/yourusername/claude-patterns"
+Issues = "https://github.com/yourusername/claude-patterns/issues"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.407",
+    "ruff>=0.14.3",
+]
