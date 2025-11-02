@@ -68,6 +68,23 @@ Create a git commit with an appropriate message based on the changes.
 ```
 ☝️ This is WRONG because it asks for [message] but never uses $ARGUMENTS!
 
+## Tools Available
+
+You have access to these tools:
+- **Read** - Read existing slash command files to check their content
+- **Glob** - List all .md files in the current directory
+- **Grep** - Search through files for patterns
+- **Write** - Create new slash command files
+- **Skip** - Explicitly skip this cluster with a reason (use when NOT creating a command)
+
+## Decision Framework
+
+You have TWO possible outcomes for each cluster:
+1. **Create** - Pattern is reusable and no duplicate exists → Use the Write tool to create a slash command
+2. **Skip** - Pattern is not reusable OR a duplicate already exists → Use the Skip tool with a clear reason
+
+You MUST use one of these tools. Do not explain your decision in text without using a tool.
+
 ## Your Task
 
 Here are the user messages in this cluster:
@@ -77,11 +94,18 @@ Here are the user messages in this cluster:
 Analyze these messages to determine if they represent a common, reusable pattern.
 
 If they do NOT represent a reusable pattern (too specific, one-off requests, etc.):
-- Simply explain why they don't warrant a slash command
-- Do NOT create any files
+- Use the **Skip tool** with a reason explaining why this pattern is not reusable
+- Example reason: "Pattern too specific: only applies to this particular project workflow"
+- Do NOT create any files or attempt any other action
 
 If they DO represent a reusable pattern:
-- Create a slash command using the Write tool
+- FIRST, check for duplicate or similar existing commands:
+  1. Use Glob to list all .md files in the current directory
+  2. Read existing commands to understand their purpose/description
+  3. Compare semantic similarity: Would an existing command serve the same purpose?
+  4. If a similar command already exists, use the **Skip tool** with an explanation of which command is similar and why
+  5. Only proceed to creation if no duplicate is found
+- If no duplicate exists, create a slash command using the Write tool
 - Save it to: {output_dir}/[command-name].md
 - Use a clear, descriptive kebab-case name (e.g., 'review-code', 'fix-tests')
 - Include frontmatter with description

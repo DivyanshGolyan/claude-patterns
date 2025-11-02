@@ -122,7 +122,7 @@ async def run_pipeline(
 
     # Step 3: Generate slash commands (only writes final .md files)
     with timed_phase("Generating slash commands"):
-        created_count = await generate_commands_from_data(
+        created_count, created_commands = await generate_commands_from_data(
             cluster_metadata,
             clusters_data,
             max_message_length=max_message_length,
@@ -134,14 +134,12 @@ async def run_pipeline(
 
     # Final summary
     commands_dir = Path.cwd() / ".claude" / "commands"
-    command_files = list(commands_dir.glob("*.md")) if commands_dir.exists() else []
 
     print_info(f"\nDone! (Total: {format_time(total_time)})\n")
 
-    if created_count > 0 and command_files:
+    if created_count > 0:
         print_info(f"Generated {created_count} slash command(s):")
-        for cmd_file in sorted(command_files):
-            cmd_name = cmd_file.stem
+        for cmd_name in sorted(created_commands):
             print_info(f"  • /{cmd_name}")
         print_info(f"\nLocation: {commands_dir}")
         print_info("Reload Claude Code to use the new commands\n")

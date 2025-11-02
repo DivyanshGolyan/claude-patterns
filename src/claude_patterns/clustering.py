@@ -34,6 +34,7 @@ def compute_embeddings(messages: List[Dict[str, Any]], model_name: str):
     # Import sentence_transformers (can be slow on first load)
     print_info("  Initializing embedding model...")
     import time
+    import torch
 
     init_start = time.time()
     try:
@@ -45,8 +46,22 @@ def compute_embeddings(messages: List[Dict[str, Any]], model_name: str):
     init_time = time.time() - init_start
     print_verbose(f"  Initialization completed in {init_time:.1f}s")
 
+    # Detect best available device (CUDA > MPS > CPU)
+    if torch.cuda.is_available():
+        device = "cuda"
+        print_verbose("  Using CUDA GPU")
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        print_verbose("  Using Apple Silicon GPU (MPS)")
+    else:
+        device = "cpu"
+        print_verbose("  Using CPU")
+
     print_verbose(f"  Loading model: {model_name}...")
-    model = SentenceTransformer(model_name)
+    load_start = time.time()
+    model = SentenceTransformer(model_name, device=device)
+    load_time = time.time() - load_start
+    print_verbose(f"  Model loaded in {load_time:.1f}s")
 
     texts = [msg["message"] for msg in messages]
     print_info(f"  Computing embeddings for {len(texts)} messages...")
