@@ -1,4 +1,9 @@
-"""Cluster similar messages using sentence transformers and hierarchical clustering."""
+"""
+Semantic clustering with GPU acceleration.
+
+Uses sentence-transformers + AgglomerativeClustering with cosine distance.
+Supports CUDA, MPS (Apple Silicon), and CPU fallback.
+"""
 
 import os
 

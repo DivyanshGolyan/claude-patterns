@@ -1,4 +1,9 @@
-"""Extract user messages from Claude Code JSONL conversation files."""
+"""
+Extraction pipeline for Claude Code conversations.
+
+Handles multi-format content blocks (text/tool_use) and filters out
+system-generated messages (bash output, interrupts, slash commands).
+"""
 
 import json
 import sys
@@ -7,6 +12,16 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 from claude_patterns.prompts import get_prompt_signature
+
+
+def validate_directory(path: Path, name: str = "Directory") -> None:
+    """Ensure path exists and is a directory."""
+    if not path.exists():
+        print(f"Error: {name} '{path}' does not exist", file=sys.stderr)
+        sys.exit(1)
+    if not path.is_dir():
+        print(f"Error: '{path}' is not a directory", file=sys.stderr)
+        sys.exit(1)
 
 
 def extract_message_content(message_data: Dict[str, Any]) -> str:
@@ -123,13 +138,7 @@ def extract_user_messages(
 def extract_all_messages(
     folder_path: Path, exclude_system: bool = False, verbose: bool = True
 ) -> List[Dict[str, Any]]:
-    if not folder_path.exists():
-        print(f"Error: Folder '{folder_path}' does not exist", file=sys.stderr)
-        sys.exit(1)
-
-    if not folder_path.is_dir():
-        print(f"Error: '{folder_path}' is not a directory", file=sys.stderr)
-        sys.exit(1)
+    validate_directory(folder_path, "Conversations folder")
 
     jsonl_files = sorted(folder_path.glob("*.jsonl"))
 

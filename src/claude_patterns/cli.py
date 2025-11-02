@@ -1,4 +1,9 @@
-"""CLI orchestration for message extraction, clustering, and command generation."""
+"""
+Main pipeline: extraction → clustering → generation.
+
+Auto-detects conversation directory from cwd, runs fully in-memory,
+writes only final .md commands to .claude/commands/.
+"""
 
 import sys
 import argparse
@@ -8,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 # Import our modules
-from claude_patterns.extraction import extract_all_messages
+from claude_patterns.extraction import extract_all_messages, validate_directory
 from claude_patterns.clustering import (
     compute_embeddings,
     cluster_messages,
@@ -112,23 +117,13 @@ async def run_pipeline(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate custom slash commands from Claude Code conversation history",
+        description="Generate slash commands from Claude Code conversation patterns",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                               # Auto-detect conversations folder
-  %(prog)s ~/conversations               # Specify conversations folder
-  %(prog)s ~/conversations --min-cluster-size 3
-
-Auto-detection:
-  Searches for ~/.claude/projects/<encoded-path>/
-  where <encoded-path> is the current directory with / replaced by -
-  Example: /Users/name/project → -Users-name-project
-
-This script will:
-  1. Extract user messages from JSONL files
-  2. Cluster similar messages
-  3. Generate slash commands for common patterns
+  %(prog)s                          # auto-detect from cwd
+  %(prog)s ~/conversations          # explicit path
+  %(prog)s --min-cluster-size 3     # require more examples per pattern
         """,
     )
 
@@ -262,17 +257,7 @@ This script will:
             sys.exit(1)
         args.conversations_folder = detected_folder
 
-    if not args.conversations_folder.exists():
-        print(
-            f"Error: Directory '{args.conversations_folder}' not found", file=sys.stderr
-        )
-        sys.exit(1)
-
-    if not args.conversations_folder.is_dir():
-        print(
-            f"Error: '{args.conversations_folder}' is not a directory", file=sys.stderr
-        )
-        sys.exit(1)
+    validate_directory(args.conversations_folder, "Conversations directory")
 
     if not check_api_credentials():
         sys.exit(1)

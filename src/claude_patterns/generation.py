@@ -1,4 +1,9 @@
-"""Generate slash commands from clustered messages using Claude Agent SDK."""
+"""
+Command generation using Claude Agent SDK.
+
+Creates slash commands with duplicate detection via custom MCP server.
+Supports both Claude Code subscription and API key authentication.
+"""
 
 import sys
 import os
@@ -43,19 +48,12 @@ def check_api_credentials() -> bool:
         print("Found CLAUDE_CODE_OAUTH_TOKEN")
         return True
 
-    print("Error: No authentication credentials found!\n")
-    print("The Claude Agent SDK requires authentication. You have two options:\n")
-    print("Option 1: Use Claude Code (recommended for Pro/Max subscribers)")
-    print("  - Make sure you're logged in to Claude Code")
-    print("  - Run: claude")
-    print("  - If not logged in, follow the prompts to authenticate\n")
-    print("Option 2: Use an Anthropic API key")
-    print("  1. Visit: https://console.anthropic.com/settings/keys")
-    print("  2. Create a new API key (starts with 'sk-ant-')")
-    print("  3. Set it as an environment variable:")
-    print("     export ANTHROPIC_API_KEY='sk-ant-your-key-here'\n")
-    print("Note: Option 1 uses your subscription; Option 2 bills separately.")
-
+    print("Error: No authentication found.", file=sys.stderr)
+    print("\nOption 1: Use Claude Code CLI (if logged in)", file=sys.stderr)
+    print(
+        "Option 2: Set ANTHROPIC_API_KEY from https://console.anthropic.com/settings/keys",
+        file=sys.stderr,
+    )
     return False
 
 
