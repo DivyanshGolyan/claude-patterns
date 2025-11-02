@@ -43,41 +43,37 @@ source ~/.zshrc
 
 ## Usage
 
-### Step 1: Extract User Messages
+### Run the Complete Pipeline
 
-Extract all user messages from Claude Code JSONL files:
-
-```bash
-uv run python -m claude_patterns.extraction ~/.claude/projects/-Users-yourname-Documents-GitHub-yourproject/ --exclude-system
-```
-
-### Step 2: Cluster Similar Messages
-
-Analyze and cluster messages by similarity:
+The pipeline automatically extracts messages, clusters them, and generates slash commands in one step:
 
 ```bash
-uv run python -m claude_patterns.clustering user_messages.json
-```
+# If installed as a tool
+claude-patterns ~/conversations
 
-This creates a timestamped folder like `clusters_20250102_143022/` containing:
-
-- `clusters.json` - Summary with representative messages
-- `cluster_0.json`, `cluster_1.json`, etc. - Full messages for each cluster
-
-### Step 3: Generate Slash Commands
-
-Use Claude Agent SDK to generate custom slash commands from clusters:
-
-```bash
-uv run python -m claude_patterns.generation clusters_20250102_143022
+# Or run directly from the repository
+uv run python -m claude_patterns ~/conversations
 ```
 
 This will:
 
-1. Check for API credentials
-2. Process each cluster file
-3. Use Claude to generate relevant slash commands
-4. Save them to `.claude/commands/` directory in the current working directory
+1. Extract all user messages from Claude Code JSONL files
+2. Cluster messages by semantic similarity
+3. Use Claude Agent SDK to generate relevant slash commands
+4. Save them to `.claude/commands/` directory
+
+**Options:**
+
+```bash
+claude-patterns ~/conversations \
+  --min-cluster-size 2 \           # Minimum messages per cluster
+  --threshold 0.7 \                # Distance threshold (lower = stricter)
+  --model all-MiniLM-L6-v2 \       # Sentence-transformer model
+  --max-message-length 500 \       # Max characters per message to agent
+  --max-messages 20 \              # Max messages per cluster to agent
+  --min-absolute 5 \               # Minimum absolute message count per cluster
+  --min-percentage 0.03            # Minimum percentage of total messages (3%)
+```
 
 ## Troubleshooting
 
@@ -141,26 +137,6 @@ claude-patterns/
 ├── .venv/                       # Virtual environment (auto-created)
 └── clusters_*/                  # Generated cluster folders (timestamped)
 ```
-
-## Advanced Options
-
-### Compute Similarity Options
-
-```bash
-uv run python -m claude_patterns.clustering messages.json \
-  --limit 1000 \              # Process only first 1000 messages
-  --threshold 0.5 \           # Lower = stricter clustering
-  --model all-mpnet-base-v2 \ # Use different embedding model
-  --output-dir my_clusters    # Custom output directory
-```
-
-### Extract Messages Options
-
-```bash
-uv run python -m claude_patterns.extraction <folder> [output.json] [--exclude-system]
-```
-
-- `--exclude-system`: Filter out system-generated messages (interruptions, bash commands, slash commands)
 
 ## Cost Considerations
 

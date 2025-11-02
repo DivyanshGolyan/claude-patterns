@@ -8,7 +8,6 @@ import json
 import sys
 import os
 import subprocess
-import anyio
 from pathlib import Path
 from typing import List, Dict, Any
 from claude_agent_sdk import query, ClaudeAgentOptions
@@ -303,41 +302,3 @@ async def generate_commands(
     )
 
     return created_count
-
-
-async def main():
-    """CLI entry point for slash command generation."""
-    # Check for API credentials first
-    if not check_api_credentials():
-        sys.exit(1)
-
-    if len(sys.argv) < 2:
-        print(
-            "Usage: generate-claude-commands <clusters_folder>",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    clusters_dir = Path(sys.argv[1])
-
-    if not clusters_dir.exists():
-        print(f"Error: Directory '{clusters_dir}' not found", file=sys.stderr)
-        sys.exit(1)
-
-    if not clusters_dir.is_dir():
-        print(f"Error: '{clusters_dir}' is not a directory", file=sys.stderr)
-        sys.exit(1)
-
-    # Generate commands
-    created_count = await generate_commands(clusters_dir)
-
-    if created_count > 0:
-        print(f"\nGenerated {created_count} slash command(s)")
-        print(f"Location: {get_commands_dir()}")
-    else:
-        print("\nNo reusable patterns found.")
-
-
-def cli_main():
-    """Wrapper for anyio to run async main."""
-    anyio.run(main)

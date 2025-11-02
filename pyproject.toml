@@ -31,9 +31,6 @@ dependencies = [
 
 [project.scripts]
 claude-patterns = "claude_patterns.cli:main"
-extract-claude-messages = "claude_patterns.extraction:main"
-cluster-claude-messages = "claude_patterns.clustering:main"
-generate-claude-commands = "claude_patterns.generation:cli_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

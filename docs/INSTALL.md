@@ -21,14 +21,6 @@ claude-patterns ~/conversations
 - ✅ Auto-updates with `uv tool upgrade claude-patterns`
 - ✅ Clean uninstall with `uv tool uninstall claude-patterns`
 
-**Individual commands also available:**
-
-```bash
-extract-claude-messages ~/conversations
-cluster-claude-messages user_messages.json
-generate-claude-commands clusters_20250102_143022
-```
-
 ---
 
 ## Option 2: Run Directly with uv (No Installation)
