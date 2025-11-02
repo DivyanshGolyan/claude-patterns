@@ -121,6 +121,7 @@ async def generate_command_from_cluster(
     output_dir: Path,
     max_message_length: int = 500,
     max_messages: int = 20,
+    anthropic_model: str = "claude-haiku-4-5",
 ) -> tuple[bool, str | None]:
     """Generate a custom slash command for a cluster using Claude Agent SDK.
 
@@ -130,6 +131,7 @@ async def generate_command_from_cluster(
         output_dir: Directory to save the generated slash command
         max_message_length: Maximum characters per message sent to agent (default: 500)
         max_messages: Maximum number of messages sent to agent per cluster (default: 20)
+        anthropic_model: Anthropic model for command generation (default: claude-haiku-4-5)
 
     Returns:
         Tuple of (was_created, command_name_or_none)
@@ -162,12 +164,12 @@ async def generate_command_from_cluster(
         output_dir=str(output_dir),
     )
 
-    # Configure options to use Haiku 4.5 with read/write access to commands directory
+    # Configure options to use specified Anthropic model with read/write access to commands directory
     # Set cwd to commands_dir so agent operates in that context for duplicate detection
     # Include custom skip tool for explicit skip decisions
     control_server = create_control_tools_server()
     options = ClaudeAgentOptions(
-        model="claude-haiku-4-5",
+        model=anthropic_model,
         cwd=str(output_dir),
         mcp_servers={"control": control_server},
         allowed_tools=["Read", "Glob", "Grep", "Write", "mcp__control__skip"],
@@ -224,6 +226,7 @@ async def generate_commands_from_data(
     cluster_messages: Dict[int, List[Dict[str, Any]]],
     max_message_length: int = 500,
     max_messages: int = 20,
+    anthropic_model: str = "claude-haiku-4-5",
 ) -> tuple[int, List[str]]:
     """Generate slash commands from in-memory cluster data.
 
@@ -232,6 +235,7 @@ async def generate_commands_from_data(
         cluster_messages: Dict mapping cluster_id to list of message dicts
         max_message_length: Maximum characters per message sent to agent
         max_messages: Maximum number of messages sent to agent per cluster
+        anthropic_model: Anthropic model for command generation
 
     Returns:
         Tuple of (number of commands created, list of command names created)
@@ -269,6 +273,7 @@ async def generate_commands_from_data(
             commands_dir,
             max_message_length=max_message_length,
             max_messages=max_messages,
+            anthropic_model=anthropic_model,
         )
         if was_created and command_name:
             created_count += 1

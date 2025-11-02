@@ -74,6 +74,7 @@ async def run_pipeline(
     max_messages: int = 20,
     min_absolute: int = 5,
     min_percentage: float = 0.03,
+    anthropic_model: str = "claude-haiku-4-5",
 ) -> None:
     """Run the complete pipeline to generate slash commands.
 
@@ -86,6 +87,7 @@ async def run_pipeline(
         max_messages: Maximum number of messages sent to agent per cluster (default: 20)
         min_absolute: Minimum absolute message count per cluster (default: 5)
         min_percentage: Minimum percentage of total messages per cluster (default: 0.03)
+        anthropic_model: Anthropic model for command generation (default: claude-haiku-4-5)
     """
     pipeline_start = time.time()
 
@@ -127,6 +129,7 @@ async def run_pipeline(
             clusters_data,
             max_message_length=max_message_length,
             max_messages=max_messages,
+            anthropic_model=anthropic_model,
         )
 
     # Calculate total time
@@ -224,6 +227,13 @@ This script will:
         type=float,
         default=0.03,
         help="Minimum percentage of total messages per cluster for impact filtering (default: 0.03 = 3%%)",
+    )
+
+    parser.add_argument(
+        "--anthropic-model",
+        type=str,
+        default="claude-haiku-4-5",
+        help="Anthropic model for command generation (default: claude-haiku-4-5)",
     )
 
     # Output verbosity flags (mutually exclusive)
@@ -330,4 +340,5 @@ This script will:
         args.max_messages,
         args.min_absolute,
         args.min_percentage,
+        args.anthropic_model,
     )
