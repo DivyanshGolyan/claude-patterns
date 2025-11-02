@@ -330,15 +330,19 @@ This script will:
     )
 
     # Run the pipeline
-    anyio.run(
-        run_pipeline,
-        args.conversations_folder,
-        args.min_cluster_size,
-        args.threshold,
-        args.model,
-        args.max_message_length,
-        args.max_messages,
-        args.min_absolute,
-        args.min_percentage,
-        args.anthropic_model,
-    )
+    try:
+        anyio.run(
+            run_pipeline,
+            args.conversations_folder,
+            args.min_cluster_size,
+            args.threshold,
+            args.model,
+            args.max_message_length,
+            args.max_messages,
+            args.min_absolute,
+            args.min_percentage,
+            args.anthropic_model,
+        )
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user. Exiting gracefully...", file=sys.stderr)
+        sys.exit(130)  # Standard exit code for SIGINT
