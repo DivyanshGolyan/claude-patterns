@@ -1,62 +1,50 @@
 # Installation Guide
 
-Multiple installation options to fit your workflow!
-
-## Option 1: Install Globally as a Tool ⭐ RECOMMENDED
+## Option 1: Install Globally as a Tool (Recommended)
 
 Install once, use anywhere:
 
 ```bash
-# Install from GitHub
 uv tool install git+https://github.com/yourusername/claude-patterns
-
-# Run from anywhere
 claude-patterns
 ```
 
-**Pros:**
+**Advantages:**
 
-- ✅ Single command installation
-- ✅ Available globally in your PATH
-- ✅ Auto-updates with `uv tool upgrade claude-patterns`
-- ✅ Clean uninstall with `uv tool uninstall claude-patterns`
+- Single command installation
+- Available globally in your PATH
+- Easy updates: `uv tool upgrade claude-patterns`
+- Clean removal: `uv tool uninstall claude-patterns`
 
 ---
 
 ## Option 2: Run Directly with uv (No Installation)
 
-Perfect for quick testing or one-time use:
+For testing or one-time use:
 
 ```bash
-# Clone the repo
 git clone https://github.com/yourusername/claude-patterns
 cd claude-patterns
-
-# Run with uv (auto-installs dependencies)
 uv run --directory . python -m claude_patterns
 ```
 
-**Pros:**
+**Advantages:**
 
-- ✅ No installation needed
-- ✅ Dependencies auto-installed on first run
-- ✅ Great for development/testing
+- No installation required
+- Dependencies automatically managed
+- Useful for development and testing
 
 ---
 
 ## Option 3: One-Line Install Script
 
-For users who want maximum convenience:
+For automated installation:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yourusername/claude-patterns/main/install.sh | bash
 ```
 
-This script:
-
-1. Checks if `uv` is installed (installs if missing)
-2. Installs `claude-patterns` as a tool
-3. Verifies installation
+This script checks for `uv` (installing if needed), installs `claude-patterns`, and verifies the installation.
 
 ---
 
@@ -65,55 +53,36 @@ This script:
 For contributing or customizing:
 
 ```bash
-# Clone the repository
 git clone https://github.com/yourusername/claude-patterns
 cd claude-patterns
-
-# Install in editable mode
 uv tool install -e .
-
-# Now changes to source code are immediately reflected
-# Edit scripts and run claude-patterns
 ```
+
+Changes to source code are immediately reflected when running `claude-patterns`.
 
 ---
 
 ## Verifying Installation
 
-After installation, verify it works:
+Test the installation:
 
 ```bash
 claude-patterns --help
 ```
 
-You should see:
-
-```
-usage: claude-patterns [-h] [--min-cluster-size MIN_CLUSTER_SIZE]
-                       conversations_folder
-
-Generate custom slash commands from Claude Code conversation history
-```
-
----
-
 ## Updating
 
-### Tool Installation
+**Tool installation:**
 
 ```bash
 uv tool upgrade claude-patterns
 ```
 
-### Development Installation
+**Development installation:**
 
 ```bash
-cd claude-patterns
-git pull
-uv sync
+cd claude-patterns && git pull && uv sync
 ```
-
----
 
 ## Uninstalling
 
@@ -125,47 +94,33 @@ uv tool uninstall claude-patterns
 
 ## Troubleshooting
 
-### uv not found
+**`uv not found`**
 
-Install uv first:
+Install uv:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### Permission denied
+**Import errors**
 
-On macOS/Linux, make scripts executable:
-
-```bash
-chmod +x *.py
-```
-
-### Import errors
-
-If using Option 2 (direct run), ensure you're in the project directory:
+Ensure you're in the project directory when using Option 2:
 
 ```bash
 cd claude-patterns
 uv run --directory . python -m claude_patterns
 ```
 
-### Claude SDK authentication
+**Authentication errors**
 
-Ensure you're logged into Claude Code:
-
-```bash
-claude
-```
-
-Or set your API key:
+Log into Claude Code or set an API key:
 
 ```bash
+claude  # Login to Claude Code
+# OR
 export ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 
----
-
 ## Next Steps
 
-After installation, see [README.md](README.md) for usage examples and configuration options.
+See [README.md](../README.md) for usage examples and configuration options.

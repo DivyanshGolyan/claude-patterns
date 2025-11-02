@@ -1,8 +1,4 @@
-"""Semantic similarity computation and clustering of user messages.
-
-This module provides functionality to cluster similar user messages using
-sentence transformers and hierarchical clustering.
-"""
+"""Cluster similar messages using sentence transformers and hierarchical clustering."""
 
 import os
 
@@ -19,19 +15,13 @@ from claude_patterns.output import print_info, print_verbose
 
 
 def compute_embeddings(messages: List[Dict[str, Any]], model_name: str):
-    """Compute sentence embeddings using sentence-transformers.
-
-    Returns:
-        Tuple of (model, embeddings) - model is needed for duplicate filtering
-    """
-    # Guard: Validate non-empty input
+    """Compute sentence embeddings. Returns (model, embeddings)."""
     if not messages:
         print(
             "Error: Cannot compute embeddings for empty message list", file=sys.stderr
         )
         sys.exit(1)
 
-    # Import sentence_transformers (can be slow on first load)
     print_info("  Initializing embedding model...")
     import time
     import torch
@@ -46,7 +36,6 @@ def compute_embeddings(messages: List[Dict[str, Any]], model_name: str):
     init_time = time.time() - init_start
     print_verbose(f"  Initialization completed in {init_time:.1f}s")
 
-    # Detect best available device (CUDA > MPS > CPU)
     if torch.cuda.is_available():
         device = "cuda"
         print_verbose("  Using CUDA GPU")
@@ -75,21 +64,16 @@ def compute_embeddings(messages: List[Dict[str, Any]], model_name: str):
 def cluster_messages(
     messages: List[Dict[str, Any]], embeddings: np.ndarray, threshold: float
 ) -> Tuple[List[List[int]], np.ndarray]:
-    """Cluster messages using hierarchical clustering."""
     from sklearn.cluster import AgglomerativeClustering
     from sklearn.metrics.pairwise import cosine_distances
 
-    # Guard: Validate non-empty input
     if len(embeddings) == 0:
         print("Error: Cannot cluster empty embeddings array", file=sys.stderr)
         sys.exit(1)
 
     print_verbose(f"  Clustering with distance threshold {threshold}...")
 
-    # Compute distance matrix (1 - cosine similarity)
     distance_matrix = cosine_distances(embeddings)
-
-    # Hierarchical clustering
     clustering = AgglomerativeClustering(
         n_clusters=None,  # type: ignore[arg-type]
         distance_threshold=threshold,
@@ -99,14 +83,12 @@ def cluster_messages(
 
     labels = clustering.fit_predict(distance_matrix)
 
-    # Group message indices by cluster
     clusters_dict: Dict[Any, List[int]] = {}
     for idx, label in enumerate(labels):
         if label not in clusters_dict:
             clusters_dict[label] = []
         clusters_dict[label].append(idx)
 
-    # Convert to list of clusters, sorted by size (largest first)
     clusters = list(clusters_dict.values())
     clusters.sort(key=len, reverse=True)
 
@@ -116,16 +98,7 @@ def cluster_messages(
 
 
 def load_existing_commands(commands_dir: Path) -> List[str]:
-    """Load existing slash command prompts from .claude/commands/ directory.
-
-    Parses markdown files and extracts the prompt content (after frontmatter).
-
-    Args:
-        commands_dir: Path to .claude/commands/ directory
-
-    Returns:
-        List of command prompt strings
-    """
+    """Load existing slash command prompts, extracting content after frontmatter."""
     if not commands_dir.exists():
         return []
 
@@ -135,11 +108,9 @@ def load_existing_commands(commands_dir: Path) -> List[str]:
         try:
             content = md_file.read_text(encoding="utf-8")
 
-            # Skip frontmatter if present (between --- markers)
             if content.startswith("---"):
                 parts = content.split("---", 2)
                 if len(parts) >= 3:
-                    # Extract content after frontmatter
                     prompt = parts[2].strip()
                 else:
                     prompt = content.strip()
@@ -162,28 +133,13 @@ def filter_duplicate_clusters(
     commands_dir: Path,
     similarity_threshold: float = 0.85,
 ) -> List[Dict[str, Any]]:
-    """Filter out clusters that are similar to existing slash commands.
-
-    Computes cosine similarity between cluster representatives and existing
-    slash command prompts. Removes clusters with similarity above threshold.
-
-    Args:
-        clusters_data: List of cluster dictionaries with 'representative' field
-        model: SentenceTransformer model for computing embeddings
-        commands_dir: Path to .claude/commands/ directory
-        similarity_threshold: Minimum similarity to consider a duplicate (default: 0.85)
-
-    Returns:
-        Filtered list of clusters
-    """
+    """Filter clusters similar to existing commands using cosine similarity."""
     from sklearn.metrics.pairwise import cosine_similarity
 
-    # Guard: Return early if no clusters to process
     if not clusters_data:
         print_verbose("  No clusters to filter - skipping duplicate filtering")
         return clusters_data
 
-    # Load existing commands
     existing_commands = load_existing_commands(commands_dir)
 
     if not existing_commands:
@@ -197,24 +153,18 @@ def filter_duplicate_clusters(
     )
     print_verbose(f"  Similarity threshold: {similarity_threshold}")
 
-    # Compute embeddings for existing commands
     command_embeddings = model.encode(
         existing_commands, show_progress_bar=False, convert_to_numpy=True
     )
 
-    # Compute embeddings for cluster representatives
     representatives = [cluster["representative"] for cluster in clusters_data]
     cluster_embeddings = model.encode(
         representatives, show_progress_bar=False, convert_to_numpy=True
     )
 
-    # Compute similarity matrix: [n_clusters x n_commands]
     similarity_matrix = cosine_similarity(cluster_embeddings, command_embeddings)
-
-    # Find max similarity for each cluster
     max_similarities = similarity_matrix.max(axis=1)
 
-    # Filter clusters
     filtered_clusters = []
     filtered_count = 0
 
@@ -248,70 +198,34 @@ def prepare_clusters(
     min_absolute: int = 5,
     min_percentage: float = 0.03,
 ) -> Tuple[List[Dict[str, Any]], Dict[int, List[Dict[str, Any]]]]:
-    """Prepare clustered messages as in-memory data structures.
-
-    Applies filtering:
-    - Minimum cluster size (default: 2, removes small clusters)
-    - Minimum 5 words in representative message
-    - Duplicate detection: filters clusters similar to existing slash commands
-    - Impact threshold: keeps clusters with ≥ min_absolute messages AND ≥ min_percentage of total
-
-    Args:
-        clusters: List of message index lists per cluster
-        messages: Original messages
-        embeddings: Precomputed embeddings
-        labels: Cluster labels
-        model: SentenceTransformer model for duplicate detection
-        min_size: Minimum cluster size (default: 2)
-        commands_dir: Directory with existing slash commands (default: .claude/commands)
-        similarity_threshold: Threshold for duplicate detection (default: 0.85)
-        min_absolute: Minimum absolute message count per cluster (default: 5)
-        min_percentage: Minimum percentage of total messages per cluster (default: 0.03)
-
-    Returns:
-        Tuple of (cluster metadata list, cluster messages dict)
-        - cluster metadata: List[Dict] with cluster_id, size, representative
-        - cluster messages: Dict[cluster_id, List[message_dicts]]
-    """
+    """Prepare clusters with filtering: min size, word count, duplicates, and impact threshold."""
     from sklearn.metrics.pairwise import cosine_similarity
 
-    # Default commands directory
     if commands_dir is None:
         commands_dir = Path.cwd() / ".claude" / "commands"
 
-    # Track filtering stages for pipeline visualization
     initial_cluster_count = len(clusters)
 
     output = []
-    cluster_messages_map = {}  # Map to store full messages for each cluster
+    cluster_messages_map = {}
 
     for cluster_id, message_indices in enumerate(clusters):
         cluster_size = len(message_indices)
 
-        # Filter: Skip clusters smaller than minimum size
         if cluster_size < min_size:
             continue
 
-        # Get embeddings for this cluster
         cluster_embeddings = embeddings[message_indices]
-
-        # Compute centroid (mean embedding)
         centroid = cluster_embeddings.mean(axis=0, keepdims=True)
-
-        # Find medoid: message with highest similarity to centroid
         similarities = cosine_similarity(cluster_embeddings, centroid).flatten()
         medoid_idx_in_cluster = similarities.argmax()
         medoid_idx = message_indices[medoid_idx_in_cluster]
-
-        # Get the representative message (medoid)
         representative = messages[medoid_idx]["message"]
 
-        # Filter: Skip clusters with short representatives (< 5 words)
         word_count = len(representative.split())
         if word_count < 5:  # noqa: PLR2004
             continue
 
-        # Store cluster info
         output.append(
             {
                 "cluster_id": cluster_id,
@@ -320,28 +234,20 @@ def prepare_clusters(
             }
         )
 
-        # Store all messages for this cluster
         cluster_messages_map[cluster_id] = [messages[idx] for idx in message_indices]
 
-    # Sort by size descending for Pareto analysis
     output.sort(key=lambda x: x["size"], reverse=True)
-
-    # Track size after first filtering (min_size and word_count)
     after_size_filter = len(output)
 
-    # Filter duplicates against existing slash commands
     output = filter_duplicate_clusters(
         output, model, commands_dir, similarity_threshold
     )
     after_duplicate_filter = len(output)
 
-    # Apply impact threshold: keep clusters with ≥ min_absolute AND ≥ min_percentage
     total_messages = sum(c["size"] for c in output)
     threshold = max(min_absolute, math.ceil(total_messages * min_percentage))
-
     impact_clusters = [c for c in output if c["size"] >= threshold]
 
-    # Re-assign cluster IDs sequentially after filtering
     old_to_new_id = {}
     final_cluster_messages = {}
 
@@ -349,13 +255,10 @@ def prepare_clusters(
         old_id = cluster["cluster_id"]
         old_to_new_id[old_id] = idx
         cluster["cluster_id"] = idx
-        # Map messages with new cluster ID
         final_cluster_messages[idx] = cluster_messages_map[old_id]
 
-    # Calculate coverage of filtered clusters
     filtered_messages = sum(c["size"] for c in impact_clusters)
 
-    # Show filtering pipeline funnel
     print_info("\n  Cluster filtering pipeline:")
     print_info(f"    {initial_cluster_count} initial clusters")
 

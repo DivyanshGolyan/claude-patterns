@@ -1,14 +1,8 @@
-"""Shared prompt templates for claude-patterns.
-
-This module contains prompt templates used across different modules,
-allowing for consistent prompts and easier filtering of agent-generated messages.
-"""
+"""Shared prompt templates for agent generation and message filtering."""
 
 import re
 
 
-# The full agent prompt template (extracted from generation.py)
-# This is used both for generating commands AND for filtering out agent messages
 AGENT_GENERATION_PROMPT_TEMPLATE = """I have analyzed user messages and found a cluster of {num_messages} similar messages.
 I need you to analyze if they represent a common, reusable pattern that would benefit from a custom slash command for Claude Code.
 
@@ -185,16 +179,6 @@ def build_generation_prompt(
     sample_messages: str,
     output_dir: str,
 ) -> str:
-    """Build the agent generation prompt from the template.
-
-    Args:
-        num_messages: Number of messages in the cluster
-        sample_messages: Formatted string of sample messages
-        output_dir: Directory where commands should be saved
-
-    Returns:
-        The formatted prompt string
-    """
     return AGENT_GENERATION_PROMPT_TEMPLATE.format(
         num_messages=num_messages,
         sample_messages=sample_messages,
@@ -203,18 +187,7 @@ def build_generation_prompt(
 
 
 def get_prompt_signature() -> str:
-    """Get a distinctive signature from the template for filtering.
-
-    Extracts static text chunks from the template (ignoring {placeholders})
-    and returns the longest chunk for matching.
-
-    Returns:
-        A distinctive string that appears in the agent prompt
-    """
+    """Extract longest static text chunk from template for message filtering."""
     template = AGENT_GENERATION_PROMPT_TEMPLATE
-
-    # Split by {placeholder} patterns to get static text chunks
     static_chunks = re.split(r"\{[^}]+\}", template)
-
-    # Return the longest static chunk (most distinctive)
     return max(static_chunks, key=len).strip()

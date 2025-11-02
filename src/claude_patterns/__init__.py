@@ -1,8 +1,4 @@
-"""Claude Code Slash Command Generator.
-
-Automatically generate custom slash commands for Claude Code by analyzing
-conversation history patterns.
-"""
+"""Generate custom slash commands from Claude Code conversation history."""
 
 __version__ = "0.1.0"
 __author__ = "Your Name"

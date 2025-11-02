@@ -1,10 +1,4 @@
-"""Main CLI orchestration for claude-patterns pipeline.
-
-This module provides the main entry point that orchestrates the complete pipeline:
-1. Extract user messages from Claude Code conversation files
-2. Cluster similar messages using semantic similarity
-3. Generate slash commands from the clusters
-"""
+"""CLI orchestration for message extraction, clustering, and command generation."""
 
 import sys
 import argparse
@@ -34,31 +28,16 @@ from claude_patterns.output import (
 
 
 def find_conversations_folder() -> Optional[Path]:
-    """Auto-detect Claude Code conversations folder for current project.
-
-    Claude Code stores conversations in:
-    ~/.claude/projects/<encoded-path>/[session-uuid].jsonl
-
-    Where <encoded-path> is the absolute project path with / replaced by -
-    Example: /Users/name/Documents/GitHub/project -> -Users-name-Documents-GitHub-project
-
-    Returns:
-        Path to conversations folder if found, None otherwise
-    """
+    """Auto-detect ~/.claude/projects/<encoded-path>/ for current directory."""
     cwd = Path.cwd().resolve()
-
-    # Claude Code encodes project paths by replacing / with -
     home_claude = Path.home() / ".claude" / "projects"
     if not home_claude.exists():
         return None
 
-    # Encode current path the same way Claude Code does
     encoded_path = str(cwd).replace("/", "-")
     project_folder = home_claude / encoded_path
 
-    # Check if this project folder exists and contains .jsonl conversation files
     if project_folder.exists() and project_folder.is_dir():
-        # Verify it contains at least one .jsonl file
         if any(project_folder.glob("*.jsonl")):
             return project_folder
 
@@ -76,22 +55,8 @@ async def run_pipeline(
     min_percentage: float = 0.03,
     anthropic_model: str = "claude-haiku-4-5",
 ) -> None:
-    """Run the complete pipeline to generate slash commands.
-
-    Args:
-        conversations_folder: Directory containing JSONL conversation files
-        min_cluster_size: Minimum messages per cluster (default: 2)
-        threshold: Distance threshold for clustering (default: 0.7)
-        model: Sentence-transformer model to use (default: all-MiniLM-L6-v2)
-        max_message_length: Maximum characters per message sent to agent (default: 500)
-        max_messages: Maximum number of messages sent to agent per cluster (default: 20)
-        min_absolute: Minimum absolute message count per cluster (default: 5)
-        min_percentage: Minimum percentage of total messages per cluster (default: 0.03)
-        anthropic_model: Anthropic model for command generation (default: claude-haiku-4-5)
-    """
     pipeline_start = time.time()
 
-    # Step 1: Extract user messages (in-memory)
     with timed_phase("Extracting user messages"):
         all_messages = extract_all_messages(
             conversations_folder, exclude_system=True, verbose=False
@@ -103,7 +68,6 @@ async def run_pipeline(
 
     print_info(f"Extracted {len(all_messages)} user messages")
 
-    # Step 2: Cluster similar messages (in-memory)
     with timed_phase("Clustering similar messages"):
         embedding_model, embeddings = compute_embeddings(all_messages, model)
         clusters, labels = cluster_messages(all_messages, embeddings, threshold)
@@ -122,7 +86,6 @@ async def run_pipeline(
         print_info("\nNo significant clusters found.")
         return
 
-    # Step 3: Generate slash commands (only writes final .md files)
     with timed_phase("Generating slash commands"):
         created_count, created_commands = await generate_commands_from_data(
             cluster_metadata,
@@ -132,10 +95,7 @@ async def run_pipeline(
             anthropic_model=anthropic_model,
         )
 
-    # Calculate total time
     total_time = time.time() - pipeline_start
-
-    # Final summary
     commands_dir = Path.cwd() / ".claude" / "commands"
 
     print_info(f"\nDone! (Total: {format_time(total_time)})\n")
@@ -151,7 +111,6 @@ async def run_pipeline(
 
 
 def main():
-    """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
         description="Generate custom slash commands from Claude Code conversation history",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -253,7 +212,6 @@ This script will:
 
     args = parser.parse_args()
 
-    # Set output level based on flags
     if args.quiet:
         set_output_level(OutputLevel.QUIET)
     elif args.verbose:
@@ -261,7 +219,6 @@ This script will:
     else:
         set_output_level(OutputLevel.NORMAL)
 
-    # Auto-detect conversations folder if not provided
     if args.conversations_folder is None:
         detected_folder = find_conversations_folder()
         if detected_folder is None:
@@ -305,7 +262,6 @@ This script will:
             sys.exit(1)
         args.conversations_folder = detected_folder
 
-    # Validate conversations folder
     if not args.conversations_folder.exists():
         print(
             f"Error: Directory '{args.conversations_folder}' not found", file=sys.stderr
@@ -318,18 +274,15 @@ This script will:
         )
         sys.exit(1)
 
-    # Check API credentials before starting
     if not check_api_credentials():
         sys.exit(1)
 
-    # Display header
     print_info("\nClaude Code Slash Command Generator")
     print_info(f"   Project: {Path.cwd().name}")
     print_info(
         f"   Conversations: {len(list(args.conversations_folder.glob('*.jsonl')))} files\n"
     )
 
-    # Run the pipeline
     try:
         anyio.run(
             run_pipeline,

@@ -1,8 +1,4 @@
-"""Slash command generation using Claude Agent SDK.
-
-This module generates custom slash commands from clustered user messages
-by analyzing patterns with Claude AI.
-"""
+"""Generate slash commands from clustered messages using Claude Agent SDK."""
 
 import sys
 import os
@@ -26,17 +22,7 @@ from claude_patterns.output import (
 
 
 def check_api_credentials() -> bool:
-    """Check if API credentials are available and provide guidance if not.
-
-    Priority:
-    1. Check for Claude Code CLI (uses your subscription)
-    2. Fall back to ANTHROPIC_API_KEY
-    3. Check for CLAUDE_CODE_OAUTH_TOKEN
-
-    Returns:
-        True if credentials are found, False otherwise
-    """
-    # First, check if Claude CLI is available and user is logged in
+    """Check API credentials: Claude CLI > ANTHROPIC_API_KEY > CLAUDE_CODE_OAUTH_TOKEN."""
     try:
         claude_path = subprocess.run(
             ["which", "claude"], capture_output=True, text=True, timeout=5
@@ -47,19 +33,16 @@ def check_api_credentials() -> bool:
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
         pass
 
-    # Fall back to checking for ANTHROPIC_API_KEY
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if api_key and api_key.startswith("sk-ant-"):
         print("Found ANTHROPIC_API_KEY")
         return True
 
-    # Check for CLAUDE_CODE_OAUTH_TOKEN as well
     oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
     if oauth_token:
         print("Found CLAUDE_CODE_OAUTH_TOKEN")
         return True
 
-    # No credentials found - provide guidance
     print("Error: No authentication credentials found!\n")
     print("The Claude Agent SDK requires authentication. You have two options:\n")
     print("Option 1: Use Claude Code (recommended for Pro/Max subscribers)")
@@ -77,22 +60,10 @@ def check_api_credentials() -> bool:
 
 
 def create_control_tools_server():
-    """Create a custom MCP server with control flow tools.
-
-    Returns:
-        An MCP server with the 'skip' tool for the agent to explicitly skip clusters.
-    """
+    """Create MCP server with 'skip' tool for agent to decline command creation."""
 
     @tool("skip", "Skip creating a slash command for this cluster", {"reason": str})
     async def skip_command(args: Dict[str, Any]) -> Dict[str, Any]:
-        """Skip creating a command with an explanation.
-
-        Args:
-            args: Dictionary with 'reason' key containing skip explanation
-
-        Returns:
-            Tool response confirming skip
-        """
         return {
             "content": [
                 {
@@ -106,11 +77,6 @@ def create_control_tools_server():
 
 
 def get_commands_dir() -> Path:
-    """Get the .claude/commands/ directory in the current working directory.
-
-    Returns:
-        Path to .claude/commands/ directory
-    """
     cwd = Path.cwd().resolve()
     return cwd / ".claude" / "commands"
 
@@ -123,25 +89,9 @@ async def generate_command_from_cluster(
     max_messages: int = 20,
     anthropic_model: str = "claude-haiku-4-5",
 ) -> tuple[bool, str | None]:
-    """Generate a custom slash command for a cluster using Claude Agent SDK.
-
-    Args:
-        cluster_id: The cluster identifier
-        messages: List of user messages in this cluster
-        output_dir: Directory to save the generated slash command
-        max_message_length: Maximum characters per message sent to agent (default: 500)
-        max_messages: Maximum number of messages sent to agent per cluster (default: 20)
-        anthropic_model: Anthropic model for command generation (default: claude-haiku-4-5)
-
-    Returns:
-        Tuple of (was_created, command_name_or_none)
-    """
     print_verbose(f"\nProcessing Cluster {cluster_id} ({len(messages)} messages)")
 
-    # Extract just the message text for analysis
     message_texts = [msg.get("message", "") for msg in messages]
-
-    # Build sample messages string (limit messages and truncate each to max length)
     sample_size = min(max_messages, len(message_texts))
     sample_lines = []
     for i, msg in enumerate(message_texts[:sample_size], 1):
@@ -157,16 +107,12 @@ async def generate_command_from_cluster(
 
     sample_messages = "\n".join(sample_lines)
 
-    # Build prompt using shared template
     prompt = build_generation_prompt(
         num_messages=len(messages),
         sample_messages=sample_messages,
         output_dir=str(output_dir),
     )
 
-    # Configure options to use specified Anthropic model with read/write access to commands directory
-    # Set cwd to commands_dir so agent operates in that context for duplicate detection
-    # Include custom skip tool for explicit skip decisions
     control_server = create_control_tools_server()
     options = ClaudeAgentOptions(
         model=anthropic_model,
@@ -176,48 +122,39 @@ async def generate_command_from_cluster(
         permission_mode="acceptEdits",
     )
 
-    # Track Write tool usage for command creation and skip tool calls
     write_tool_used = False
     created_file_path = None
     skip_tool_used = False
     skip_reason = None
 
-    # Use ClaudeSDKClient to support custom tools
     async with ClaudeSDKClient(options=options) as client:
         await client.query(prompt)
         async for message in client.receive_response():
             try:
-                # Check for tool use in assistant messages
                 content = getattr(message, "content", None)
                 if content is not None:
                     for block in content:
-                        # Track Write tool usage for command creation
                         if isinstance(block, ToolUseBlock):
                             if block.name == "Write":
                                 write_tool_used = True
                                 created_file_path = block.input.get("file_path")
-                            # Check for skip tool invocation (could be "skip" or "mcp__control__skip")
                             elif block.name in ("skip", "mcp__control__skip"):
                                 skip_tool_used = True
                                 skip_reason = block.input.get(
                                     "reason", "No reason provided"
                                 )
             except (AttributeError, TypeError):
-                # Skip messages without content attribute or non-iterable content
                 continue
 
-    # Report the outcome
     if write_tool_used and created_file_path:
         command_name = Path(created_file_path).stem
-        print_info(f"    ✓ Created slash command: /{command_name}")
+        print_info(f"    Created slash command: /{command_name}")
         return True, command_name
     elif skip_tool_used:
-        # Agent explicitly used skip tool with a reason
-        print_info(f"    ⊘ Skipped: {skip_reason}")
+        print_info(f"    Skipped: {skip_reason}")
         return False, None
     else:
-        # Agent didn't use either tool - this shouldn't happen with updated prompt
-        print_info("    ✗ Skipped (agent did not make explicit decision)")
+        print_info("    Skipped (agent did not make explicit decision)")
         return False, None
 
 
@@ -228,36 +165,20 @@ async def generate_commands_from_data(
     max_messages: int = 20,
     anthropic_model: str = "claude-haiku-4-5",
 ) -> tuple[int, List[str]]:
-    """Generate slash commands from in-memory cluster data.
-
-    Args:
-        cluster_metadata: List of cluster metadata dicts (id, size, representative)
-        cluster_messages: Dict mapping cluster_id to list of message dicts
-        max_message_length: Maximum characters per message sent to agent
-        max_messages: Maximum number of messages sent to agent per cluster
-        anthropic_model: Anthropic model for command generation
-
-    Returns:
-        Tuple of (number of commands created, list of command names created)
-    """
     if not cluster_metadata:
         print("Error: No clusters provided", file=sys.stderr)
         return 0, []
 
-    # Get commands directory and create if needed
     commands_dir = get_commands_dir()
     commands_dir.mkdir(parents=True, exist_ok=True)
 
-    # Track statistics
     created_count = 0
     created_commands = []
     skipped_count = 0
     total_clusters = len(cluster_metadata)
 
-    # Create progress counter
     progress = ProgressCounter(total_clusters, "Processing clusters")
 
-    # Process each cluster
     for cluster_meta in cluster_metadata:
         cluster_id = cluster_meta["cluster_id"]
         messages = cluster_messages.get(cluster_id, [])
@@ -266,7 +187,6 @@ async def generate_commands_from_data(
             progress.update()
             continue
 
-        # Generate slash command for this cluster
         was_created, command_name = await generate_command_from_cluster(
             cluster_id,
             messages,
@@ -285,12 +205,11 @@ async def generate_commands_from_data(
 
     progress.finish()
 
-    # Print summary of what was generated vs skipped
     summary_parts = []
     if created_count > 0:
-        summary_parts.append(f"✓ Created {created_count}")
+        summary_parts.append(f"Created {created_count}")
     if skipped_count > 0:
-        summary_parts.append(f"✗ Skipped {skipped_count}")
+        summary_parts.append(f"Skipped {skipped_count}")
 
     if summary_parts:
         print_verbose(f"  {', '.join(summary_parts)} (see details above)")

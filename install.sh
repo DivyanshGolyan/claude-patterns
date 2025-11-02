@@ -13,7 +13,7 @@ echo ""
 
 # Check if uv is installed
 if ! command -v uv &> /dev/null; then
-    echo "📦 Installing uv (ultra-fast Python package manager)..."
+    echo "Installing uv (ultra-fast Python package manager)..."
 
     if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
         # Windows
@@ -28,19 +28,19 @@ if ! command -v uv &> /dev/null; then
         source "$HOME/.cargo/env"
     fi
 
-    echo "✅ uv installed successfully"
+    echo "uv installed successfully"
 else
-    echo "✅ uv is already installed"
+    echo "uv is already installed"
 fi
 
 echo ""
-echo "📥 Installing claude-patterns..."
+echo "Installing claude-patterns..."
 
 # Install claude-patterns from GitHub
 uv tool install git+https://github.com/yourusername/claude-patterns
 
 echo ""
-echo "🎉 Installation complete!"
+echo "Installation complete!"
 echo ""
 echo "Usage:"
 echo "  claude-patterns ~/path/to/conversations"
