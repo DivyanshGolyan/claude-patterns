@@ -11,7 +11,7 @@ Install once, use anywhere:
 uv tool install git+https://github.com/yourusername/claude-patterns
 
 # Run from anywhere
-claude-patterns ~/conversations
+claude-patterns
 ```
 
 **Pros:**
@@ -33,7 +33,7 @@ git clone https://github.com/yourusername/claude-patterns
 cd claude-patterns
 
 # Run with uv (auto-installs dependencies)
-uv run --directory . python -m claude_patterns ~/conversations
+uv run --directory . python -m claude_patterns
 ```
 
 **Pros:**
@@ -147,7 +147,7 @@ If using Option 2 (direct run), ensure you're in the project directory:
 
 ```bash
 cd claude-patterns
-uv run --directory . python -m claude_patterns ~/conversations
+uv run --directory . python -m claude_patterns
 ```
 
 ### Claude SDK authentication

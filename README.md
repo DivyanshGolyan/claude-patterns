@@ -10,7 +10,7 @@ Install once, use anywhere:
 
 ```bash
 uv tool install git+https://github.com/yourusername/claude-patterns
-claude-patterns ~/conversations
+claude-patterns
 ```
 
 ### Option 2: One-Line Install Script
@@ -24,7 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/yourusername/claude-patterns/main/i
 ```bash
 git clone https://github.com/yourusername/claude-patterns
 cd claude-patterns
-uv run --directory . python -m claude_patterns ~/conversations
+uv run --directory . python -m claude_patterns
 ```
 
 See [docs/INSTALL.md](docs/INSTALL.md) for detailed installation options and troubleshooting.
@@ -68,13 +68,13 @@ This project uses standard Python packaging with `pyproject.toml`. When you inst
 **If installed as a tool:**
 
 ```bash
-claude-patterns ~/conversations --min-cluster-size 3
+claude-patterns --min-cluster-size 3
 ```
 
 **If running directly:**
 
 ```bash
-uv run python -m claude_patterns ~/conversations --min-cluster-size 3
+uv run python -m claude_patterns --min-cluster-size 3
 ```
 
 **Options:**
@@ -139,7 +139,7 @@ If you need to include system messages when using the extraction module directly
 
 ```bash
 # Extract without filtering (includes system messages)
-uv run python -m claude_patterns.extraction ~/conversations
+uv run python -m claude_patterns.extraction
 # Default behavior excludes system messages with --exclude-system
 ```
 

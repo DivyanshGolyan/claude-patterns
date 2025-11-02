@@ -13,7 +13,7 @@ uv tool install git+https://github.com/yourusername/claude-patterns
 **Then run from anywhere:**
 
 ```bash
-claude-patterns ~/conversations
+claude-patterns
 ```
 
 **How it works:**
@@ -57,7 +57,7 @@ curl -fsSL https://raw.githubusercontent.com/yourusername/claude-patterns/main/i
 ```bash
 git clone https://github.com/yourusername/claude-patterns
 cd claude-patterns
-uv run --directory . python -m claude_patterns ~/conversations
+uv run --directory . python -m claude_patterns
 ```
 
 **How it works:**
@@ -231,15 +231,15 @@ Your users can run `claude-patterns` from anywhere with just **one command**:
 ```bash
 # Option 1: Install globally
 uv tool install git+https://github.com/yourusername/claude-patterns
-claude-patterns ~/conversations
+claude-patterns
 
 # Option 2: One-line installer
 curl -fsSL https://raw.githubusercontent.com/yourusername/claude-patterns/main/install.sh | bash
-claude-patterns ~/conversations
+claude-patterns
 
 # Option 3: Direct run (no install)
 git clone https://github.com/yourusername/claude-patterns && cd claude-patterns
-uv run --directory . python -m claude_patterns ~/conversations
+uv run --directory . python -m claude_patterns
 ```
 
 All three methods handle dependencies automatically. Choose based on your users' technical level and use case.

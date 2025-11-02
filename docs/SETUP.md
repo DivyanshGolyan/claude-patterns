@@ -49,10 +49,10 @@ The pipeline automatically extracts messages, clusters them, and generates slash
 
 ```bash
 # If installed as a tool
-claude-patterns ~/conversations
+claude-patterns
 
 # Or run directly from the repository
-uv run python -m claude_patterns ~/conversations
+uv run python -m claude_patterns
 ```
 
 This will:
@@ -65,7 +65,7 @@ This will:
 **Options:**
 
 ```bash
-claude-patterns ~/conversations \
+claude-patterns \
   --min-cluster-size 2 \           # Minimum messages per cluster
   --threshold 0.7 \                # Distance threshold (lower = stricter)
   --model all-MiniLM-L6-v2 \       # Sentence-transformer model
