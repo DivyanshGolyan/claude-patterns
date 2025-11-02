@@ -43,6 +43,13 @@ def compute_embeddings(messages: List[Dict[str, Any]], model_name: str):
         print("Install with: pip install sentence-transformers", file=sys.stderr)
         sys.exit(1)
 
+    # Guard: Validate non-empty input
+    if not messages:
+        print(
+            "Error: Cannot compute embeddings for empty message list", file=sys.stderr
+        )
+        sys.exit(1)
+
     print(f"Loading model: {model_name}...")
     model = SentenceTransformer(model_name)
 
@@ -61,6 +68,11 @@ def cluster_messages(
     """Cluster messages using hierarchical clustering."""
     from sklearn.cluster import AgglomerativeClustering
     from sklearn.metrics.pairwise import cosine_distances
+
+    # Guard: Validate non-empty input
+    if len(embeddings) == 0:
+        print("Error: Cannot cluster empty embeddings array", file=sys.stderr)
+        sys.exit(1)
 
     print(f"Clustering with distance threshold {threshold}...")
 
@@ -155,6 +167,11 @@ def filter_duplicate_clusters(
         Filtered list of clusters
     """
     from sklearn.metrics.pairwise import cosine_similarity
+
+    # Guard: Return early if no clusters to process
+    if not clusters_data:
+        print("No clusters to filter - skipping duplicate filtering")
+        return clusters_data
 
     # Load existing commands
     existing_commands = load_existing_commands(commands_dir)

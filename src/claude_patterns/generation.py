@@ -258,6 +258,10 @@ async def generate_commands(
         with open(cluster_file, "r", encoding="utf-8") as f:
             messages = json.load(f)
 
+        # Guard: Skip empty clusters
+        if not messages:
+            continue
+
         # Generate slash command for this cluster
         was_created = await generate_command_from_cluster(
             cluster_id,
