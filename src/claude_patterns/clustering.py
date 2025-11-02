@@ -9,27 +9,13 @@ import os
 # Disable tokenizers parallelism to avoid fork warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-import json
+import math
 import sys
-import argparse
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
 import numpy as np
 
 from claude_patterns.output import print_info, print_verbose
-
-
-def load_messages(json_file: Path, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    """Load user messages from JSON file."""
-    with open(json_file, "r", encoding="utf-8") as f:
-        messages = json.load(f)
-
-    if limit:
-        messages = messages[:limit]
-
-    print(f"Loaded {len(messages)} messages")
-    return messages
 
 
 def compute_embeddings(messages: List[Dict[str, Any]], model_name: str):
@@ -244,6 +230,8 @@ def prepare_clusters(
     min_size: int = 2,
     commands_dir: Optional[Path] = None,
     similarity_threshold: float = 0.85,
+    min_absolute: int = 5,
+    min_percentage: float = 0.03,
 ) -> Tuple[List[Dict[str, Any]], Dict[int, List[Dict[str, Any]]]]:
     """Prepare clustered messages as in-memory data structures.
 
@@ -251,7 +239,7 @@ def prepare_clusters(
     - Minimum cluster size (default: 2, removes small clusters)
     - Minimum 5 words in representative message
     - Duplicate detection: filters clusters similar to existing slash commands
-    - Pareto principle: keeps top clusters accounting for 80% of total messages
+    - Impact threshold: keeps clusters with ≥ min_absolute messages AND ≥ min_percentage of total
 
     Args:
         clusters: List of message index lists per cluster
@@ -262,6 +250,8 @@ def prepare_clusters(
         min_size: Minimum cluster size (default: 2)
         commands_dir: Directory with existing slash commands (default: .claude/commands)
         similarity_threshold: Threshold for duplicate detection (default: 0.85)
+        min_absolute: Minimum absolute message count per cluster (default: 5)
+        min_percentage: Minimum percentage of total messages per cluster (default: 0.03)
 
     Returns:
         Tuple of (cluster metadata list, cluster messages dict)
@@ -330,30 +320,25 @@ def prepare_clusters(
     )
     after_duplicate_filter = len(output)
 
-    # Apply Pareto principle: keep clusters accounting for 80% of messages
+    # Apply impact threshold: keep clusters with ≥ min_absolute AND ≥ min_percentage
     total_messages = sum(c["size"] for c in output)
-    pareto_threshold = total_messages * 0.8
-    cumulative_messages = 0
-    pareto_clusters = []
-    pareto_cluster_ids = []
+    threshold = max(min_absolute, math.ceil(total_messages * min_percentage))
 
-    for cluster in output:
-        cumulative_messages += cluster["size"]
-        pareto_clusters.append(cluster)
-        pareto_cluster_ids.append(cluster["cluster_id"])
-        if cumulative_messages >= pareto_threshold:
-            break
+    impact_clusters = [c for c in output if c["size"] >= threshold]
 
     # Re-assign cluster IDs sequentially after filtering
     old_to_new_id = {}
     final_cluster_messages = {}
 
-    for idx, cluster in enumerate(pareto_clusters):
+    for idx, cluster in enumerate(impact_clusters):
         old_id = cluster["cluster_id"]
         old_to_new_id[old_id] = idx
         cluster["cluster_id"] = idx
         # Map messages with new cluster ID
         final_cluster_messages[idx] = cluster_messages_map[old_id]
+
+    # Calculate coverage of filtered clusters
+    filtered_messages = sum(c["size"] for c in impact_clusters)
 
     # Show filtering pipeline funnel
     print_info("\n  Cluster filtering pipeline:")
@@ -371,242 +356,16 @@ def prepare_clusters(
             f"    → {after_duplicate_filter} after duplicate filtering (-{duplicate_filtered} similar to existing)"
         )
 
-    pareto_filtered = after_duplicate_filter - len(pareto_clusters)
-    if pareto_filtered > 0:
+    impact_filtered = after_duplicate_filter - len(impact_clusters)
+    if impact_filtered > 0:
         print_info(
-            f"    → {len(pareto_clusters)} after Pareto filtering (-{pareto_filtered} low-volume)"
+            f"    → {len(impact_clusters)} after impact filtering (-{impact_filtered} low-impact, threshold: {threshold} messages)"
         )
 
     if total_messages > 0:
-        coverage_pct = cumulative_messages / total_messages * 100
+        coverage_pct = filtered_messages / total_messages * 100
         print_info(
-            f"\n  Coverage: {cumulative_messages}/{total_messages} messages ({coverage_pct:.1f}%)"
+            f"\n  Coverage: {filtered_messages}/{total_messages} messages ({coverage_pct:.1f}%)"
         )
 
-    return pareto_clusters, final_cluster_messages
-
-
-def save_clusters(
-    clusters: List[List[int]],
-    messages: List[Dict[str, Any]],
-    embeddings: np.ndarray,
-    labels: np.ndarray,
-    model,
-    output_dir: Optional[Path] = None,
-    min_size: int = 2,
-    commands_dir: Optional[Path] = None,
-    similarity_threshold: float = 0.85,
-) -> Tuple[List[Dict[str, Any]], Path]:
-    """Save clustered messages to timestamped folder with cluster files.
-
-    Creates a folder with timestamp containing:
-    - clusters.json: Summary with representatives
-    - cluster_N.json: Full messages for each cluster
-
-    Applies filtering:
-    - Minimum cluster size (default: 2, removes small clusters)
-    - Minimum 5 words in representative message
-    - Duplicate detection: filters clusters similar to existing slash commands
-    - Pareto principle: keeps top clusters accounting for 80% of total messages
-
-    Args:
-        clusters: List of message index lists per cluster
-        messages: Original messages
-        embeddings: Precomputed embeddings
-        labels: Cluster labels
-        model: SentenceTransformer model for duplicate detection
-        output_dir: Output directory (default: auto-generated with timestamp)
-        min_size: Minimum cluster size (default: 2)
-        commands_dir: Directory with existing slash commands (default: .claude/commands)
-        similarity_threshold: Threshold for duplicate detection (default: 0.85)
-
-    Returns:
-        Tuple of (filtered cluster data, output directory path)
-    """
-    from sklearn.metrics.pairwise import cosine_similarity
-
-    # Default commands directory
-    if commands_dir is None:
-        commands_dir = Path.cwd() / ".claude" / "commands"
-
-    # Create timestamped output directory
-    if output_dir is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path(f"clusters_{timestamp}")
-
-    output_dir.mkdir(exist_ok=True)
-    print(f"Creating output directory: {output_dir}")
-
-    output = []
-    cluster_messages_map = {}  # Map to store full messages for each cluster
-
-    for cluster_id, message_indices in enumerate(clusters):
-        cluster_size = len(message_indices)
-
-        # Filter: Skip clusters smaller than minimum size
-        if cluster_size < min_size:
-            continue
-
-        # Get embeddings for this cluster
-        cluster_embeddings = embeddings[message_indices]
-
-        # Compute centroid (mean embedding)
-        centroid = cluster_embeddings.mean(axis=0, keepdims=True)
-
-        # Find medoid: message with highest similarity to centroid
-        similarities = cosine_similarity(cluster_embeddings, centroid).flatten()
-        medoid_idx_in_cluster = similarities.argmax()
-        medoid_idx = message_indices[medoid_idx_in_cluster]
-
-        # Get the representative message (medoid)
-        representative = messages[medoid_idx]["message"]
-
-        # Filter: Skip clusters with short representatives (< 5 words)
-        word_count = len(representative.split())
-        if word_count < 5:  # noqa: PLR2004
-            continue
-
-        # Store cluster info
-        output.append(
-            {
-                "cluster_id": cluster_id,
-                "size": cluster_size,
-                "representative": representative,
-            }
-        )
-
-        # Store all messages for this cluster
-        cluster_messages_map[cluster_id] = [messages[idx] for idx in message_indices]
-
-    # Sort by size descending for Pareto analysis
-    output.sort(key=lambda x: x["size"], reverse=True)
-
-    # Filter duplicates against existing slash commands
-    output = filter_duplicate_clusters(
-        output, model, commands_dir, similarity_threshold
-    )
-
-    # Apply Pareto principle: keep clusters accounting for 80% of messages
-    total_messages = sum(c["size"] for c in output)
-    pareto_threshold = total_messages * 0.8
-    cumulative_messages = 0
-    pareto_clusters = []
-    pareto_cluster_ids = []
-
-    for cluster in output:
-        cumulative_messages += cluster["size"]
-        pareto_clusters.append(cluster)
-        pareto_cluster_ids.append(cluster["cluster_id"])
-        if cumulative_messages >= pareto_threshold:
-            break
-
-    # Re-assign cluster IDs sequentially after filtering
-    old_to_new_id = {}
-    for idx, cluster in enumerate(pareto_clusters):
-        old_id = cluster["cluster_id"]
-        old_to_new_id[old_id] = idx
-        cluster["cluster_id"] = idx
-
-    # Save clusters summary
-    clusters_file = output_dir / "clusters.json"
-    with open(clusters_file, "w", encoding="utf-8") as f:
-        json.dump(pareto_clusters, f, indent=2, ensure_ascii=False)
-
-    print(f"Saved {len(pareto_clusters)} clusters to {clusters_file}")
-    print(f"  Filtered out: {len(output) - len(pareto_clusters)} low-volume clusters")
-    if total_messages > 0:
-        print(
-            f"  Coverage: {cumulative_messages}/{total_messages} messages ({cumulative_messages / total_messages * 100:.1f}%)"
-        )
-
-    # Save individual cluster files with all messages
-    for old_id in pareto_cluster_ids:
-        new_id = old_to_new_id[old_id]
-        cluster_file = output_dir / f"cluster_{new_id}.json"
-        cluster_messages = cluster_messages_map[old_id]
-
-        with open(cluster_file, "w", encoding="utf-8") as f:
-            json.dump(cluster_messages, f, indent=2, ensure_ascii=False)
-
-        print(f"  Saved cluster_{new_id}.json ({len(cluster_messages)} messages)")
-
-    return pareto_clusters, output_dir
-
-
-def print_summary(clusters_data: List[Dict[str, Any]], show_top: int = 10):
-    """Print summary of clusters."""
-    print(f"\n{'=' * 80}")
-    print("CLUSTER SUMMARY")
-    print(f"{'=' * 80}")
-    print(f"Total clusters: {len(clusters_data)}")
-    print(f"Total messages: {sum(c['size'] for c in clusters_data)}")
-    print(f"\nTop {show_top} clusters by size:\n")
-
-    for i, cluster in enumerate(clusters_data[:show_top], 1):
-        print(f"{i}. Cluster {cluster['cluster_id']} ({cluster['size']} messages)")
-        print(f"   Representative: {cluster['representative']}")
-        print()
-
-
-def main():
-    """CLI entry point for clustering."""
-    parser = argparse.ArgumentParser(
-        description="Compute semantic similarity and cluster user messages"
-    )
-    parser.add_argument(
-        "messages_file", type=Path, help="Input JSON file with messages"
-    )
-    parser.add_argument("--limit", type=int, help="Process only first N messages")
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=0.7,
-        help="Distance threshold for clustering (default: 0.7, lower = stricter)",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="all-MiniLM-L6-v2",
-        help="Sentence-transformer model (default: all-MiniLM-L6-v2)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=None,
-        help="Output directory for clusters (default: auto-generated with timestamp)",
-    )
-    parser.add_argument(
-        "--min-size",
-        type=int,
-        default=2,
-        help="Minimum cluster size (default: 2)",
-    )
-
-    args = parser.parse_args()
-
-    if not args.messages_file.exists():
-        print(f"Error: File '{args.messages_file}' not found", file=sys.stderr)
-        sys.exit(1)
-
-    # Load messages
-    messages = load_messages(args.messages_file, args.limit)
-
-    if not messages:
-        print("Error: No messages to process", file=sys.stderr)
-        sys.exit(1)
-
-    # Compute embeddings
-    model, embeddings = compute_embeddings(messages, args.model)
-
-    # Cluster messages
-    clusters, labels = cluster_messages(messages, embeddings, args.threshold)
-
-    # Save results (includes duplicate filtering against existing commands)
-    clusters_data, output_dir = save_clusters(
-        clusters, messages, embeddings, labels, model, args.output_dir, args.min_size
-    )
-
-    # Print summary
-    print_summary(clusters_data)
-
-    print(f"\nDone! View clusters in {output_dir}")
+    return impact_clusters, final_cluster_messages

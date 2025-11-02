@@ -205,32 +205,3 @@ def extract_all_messages(
             print(f"  Average message length: {avg_length:.1f} characters")
 
     return all_messages
-
-
-def main():
-    """CLI entry point for message extraction."""
-    # Parse arguments
-    args = sys.argv[1:]
-    if not args:
-        print(
-            "Usage: extract-claude-messages <folder_path> [output.json] [--exclude-system]",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    # Check for --exclude-system flag
-    exclude_system = "--exclude-system" in args
-    if exclude_system:
-        args.remove("--exclude-system")
-
-    folder_path = Path(args[0])
-    output_file = Path(args[1]) if len(args) > 1 else Path("user_messages.json")
-
-    # Extract messages using the shared function
-    all_messages = extract_all_messages(folder_path, exclude_system, verbose=True)
-
-    # Write to output file
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(all_messages, f, indent=2, ensure_ascii=False)
-
-    print(f"Saved to {output_file}")

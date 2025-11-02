@@ -72,6 +72,8 @@ async def run_pipeline(
     model: str = "all-MiniLM-L6-v2",
     max_message_length: int = 500,
     max_messages: int = 20,
+    min_absolute: int = 5,
+    min_percentage: float = 0.03,
 ) -> None:
     """Run the complete pipeline to generate slash commands.
 
@@ -82,6 +84,8 @@ async def run_pipeline(
         model: Sentence-transformer model to use (default: all-MiniLM-L6-v2)
         max_message_length: Maximum characters per message sent to agent (default: 500)
         max_messages: Maximum number of messages sent to agent per cluster (default: 20)
+        min_absolute: Minimum absolute message count per cluster (default: 5)
+        min_percentage: Minimum percentage of total messages per cluster (default: 0.03)
     """
     pipeline_start = time.time()
 
@@ -108,6 +112,8 @@ async def run_pipeline(
             labels,
             embedding_model,
             min_size=min_cluster_size,
+            min_absolute=min_absolute,
+            min_percentage=min_percentage,
         )
 
     if not cluster_metadata:
@@ -206,6 +212,20 @@ This script will:
         type=int,
         default=20,
         help="Maximum number of messages sent to agent per cluster (default: 20)",
+    )
+
+    parser.add_argument(
+        "--min-absolute",
+        type=int,
+        default=5,
+        help="Minimum absolute message count per cluster for impact filtering (default: 5)",
+    )
+
+    parser.add_argument(
+        "--min-percentage",
+        type=float,
+        default=0.03,
+        help="Minimum percentage of total messages per cluster for impact filtering (default: 0.03 = 3%%)",
     )
 
     # Output verbosity flags (mutually exclusive)
@@ -310,4 +330,6 @@ This script will:
         args.model,
         args.max_message_length,
         args.max_messages,
+        args.min_absolute,
+        args.min_percentage,
     )
