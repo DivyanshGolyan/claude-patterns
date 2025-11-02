@@ -9,6 +9,7 @@ This module provides the main entry point that orchestrates the complete pipelin
 import sys
 import argparse
 import anyio
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +23,13 @@ from claude_patterns.clustering import (
 from claude_patterns.generation import (
     check_api_credentials,
     generate_commands_from_data,
+)
+from claude_patterns.output import (
+    OutputLevel,
+    set_output_level,
+    timed_phase,
+    print_info,
+    format_time,
 )
 
 
@@ -75,60 +83,64 @@ async def run_pipeline(
         max_message_length: Maximum characters per message sent to agent (default: 500)
         max_messages: Maximum number of messages sent to agent per cluster (default: 20)
     """
+    pipeline_start = time.time()
+
     # Step 1: Extract user messages (in-memory)
-    print("→ Extracting user messages...")
-    all_messages = extract_all_messages(
-        conversations_folder, exclude_system=True, verbose=False
-    )
+    with timed_phase("Extracting user messages"):
+        all_messages = extract_all_messages(
+            conversations_folder, exclude_system=True, verbose=False
+        )
 
     if not all_messages:
         print("Error: No user messages found", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Extracted {len(all_messages)} user messages")
+    print_info(f"Extracted {len(all_messages)} user messages")
 
     # Step 2: Cluster similar messages (in-memory)
-    print("→ Clustering similar messages...")
-    embedding_model, embeddings = compute_embeddings(all_messages, model)
-    clusters, labels = cluster_messages(all_messages, embeddings, threshold)
-    cluster_metadata, clusters_data = prepare_clusters(
-        clusters,
-        all_messages,
-        embeddings,
-        labels,
-        embedding_model,
-        min_size=min_cluster_size,
-    )
+    with timed_phase("Clustering similar messages"):
+        embedding_model, embeddings = compute_embeddings(all_messages, model)
+        clusters, labels = cluster_messages(all_messages, embeddings, threshold)
+        cluster_metadata, clusters_data = prepare_clusters(
+            clusters,
+            all_messages,
+            embeddings,
+            labels,
+            embedding_model,
+            min_size=min_cluster_size,
+        )
 
     if not cluster_metadata:
-        print("\nNo significant clusters found.")
+        print_info("\nNo significant clusters found.")
         return
 
     # Step 3: Generate slash commands (only writes final .md files)
-    print("→ Generating slash commands...")
-    created_count = await generate_commands_from_data(
-        cluster_metadata,
-        clusters_data,
-        quiet=True,
-        max_message_length=max_message_length,
-        max_messages=max_messages,
-    )
+    with timed_phase("Generating slash commands"):
+        created_count = await generate_commands_from_data(
+            cluster_metadata,
+            clusters_data,
+            max_message_length=max_message_length,
+            max_messages=max_messages,
+        )
+
+    # Calculate total time
+    total_time = time.time() - pipeline_start
 
     # Final summary
     commands_dir = Path.cwd() / ".claude" / "commands"
     command_files = list(commands_dir.glob("*.md")) if commands_dir.exists() else []
 
-    print("\nDone!\n")
+    print_info(f"\nDone! (Total: {format_time(total_time)})\n")
 
     if created_count > 0 and command_files:
-        print(f"Generated {created_count} slash command(s):")
+        print_info(f"Generated {created_count} slash command(s):")
         for cmd_file in sorted(command_files):
             cmd_name = cmd_file.stem
-            print(f"  • /{cmd_name}")
-        print(f"\nLocation: {commands_dir}")
-        print("Reload Claude Code to use the new commands\n")
+            print_info(f"  • /{cmd_name}")
+        print_info(f"\nLocation: {commands_dir}")
+        print_info("Reload Claude Code to use the new commands\n")
     else:
-        print("No reusable patterns found in your conversations.\n")
+        print_info("No reusable patterns found in your conversations.\n")
 
 
 def main():
@@ -196,7 +208,30 @@ This script will:
         help="Maximum number of messages sent to agent per cluster (default: 20)",
     )
 
+    # Output verbosity flags (mutually exclusive)
+    verbosity_group = parser.add_mutually_exclusive_group()
+    verbosity_group.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Show detailed output including debugging information",
+    )
+    verbosity_group.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Minimal output (only final results)",
+    )
+
     args = parser.parse_args()
+
+    # Set output level based on flags
+    if args.quiet:
+        set_output_level(OutputLevel.QUIET)
+    elif args.verbose:
+        set_output_level(OutputLevel.VERBOSE)
+    else:
+        set_output_level(OutputLevel.NORMAL)
 
     # Auto-detect conversations folder if not provided
     if args.conversations_folder is None:
@@ -260,9 +295,9 @@ This script will:
         sys.exit(1)
 
     # Display header
-    print("\nClaude Code Slash Command Generator")
-    print(f"   Project: {Path.cwd().name}")
-    print(
+    print_info("\nClaude Code Slash Command Generator")
+    print_info(f"   Project: {Path.cwd().name}")
+    print_info(
         f"   Conversations: {len(list(args.conversations_folder.glob('*.jsonl')))} files\n"
     )
 

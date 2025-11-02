@@ -15,6 +15,11 @@ from claude_agent_sdk import query, ClaudeAgentOptions
 from claude_agent_sdk.types import ToolUseBlock
 
 from claude_patterns.prompts import build_generation_prompt
+from claude_patterns.output import (
+    print_info,
+    print_verbose,
+    ProgressCounter,
+)
 
 
 def check_api_credentials() -> bool:
@@ -82,25 +87,22 @@ async def generate_command_from_cluster(
     cluster_id: int,
     messages: List[Dict[str, Any]],
     output_dir: Path,
-    quiet: bool = True,
     max_message_length: int = 500,
     max_messages: int = 20,
-) -> bool:
+) -> tuple[bool, str | None]:
     """Generate a custom slash command for a cluster using Claude Agent SDK.
 
     Args:
         cluster_id: The cluster identifier
         messages: List of user messages in this cluster
         output_dir: Directory to save the generated slash command
-        quiet: If True, suppress verbose output
         max_message_length: Maximum characters per message sent to agent (default: 500)
         max_messages: Maximum number of messages sent to agent per cluster (default: 20)
 
     Returns:
-        True if command was created, False if skipped
+        Tuple of (was_created, command_name_or_none)
     """
-    if not quiet:
-        print(f"\nProcessing Cluster {cluster_id} ({len(messages)} messages)")
+    print_verbose(f"\nProcessing Cluster {cluster_id} ({len(messages)} messages)")
 
     # Extract just the message text for analysis
     message_texts = [msg.get("message", "") for msg in messages]
@@ -155,20 +157,17 @@ async def generate_command_from_cluster(
 
     # Report the outcome
     if write_tool_used and created_file_path:
-        if not quiet:
-            command_name = Path(created_file_path).stem
-            print(f"  Created: /{command_name}")
-        return True
+        command_name = Path(created_file_path).stem
+        print_info(f"    ✓ Created slash command: /{command_name}")
+        return True, command_name
     else:
-        if not quiet:
-            print("  Skipped")
-        return False
+        print_info("    ✗ Skipped (pattern not reusable)")
+        return False, None
 
 
 async def generate_commands_from_data(
     cluster_metadata: List[Dict[str, Any]],
     cluster_messages: Dict[int, List[Dict[str, Any]]],
-    quiet: bool = True,
     max_message_length: int = 500,
     max_messages: int = 20,
 ) -> int:
@@ -177,7 +176,6 @@ async def generate_commands_from_data(
     Args:
         cluster_metadata: List of cluster metadata dicts (id, size, representative)
         cluster_messages: Dict mapping cluster_id to list of message dicts
-        quiet: If True, suppress verbose output
         max_message_length: Maximum characters per message sent to agent
         max_messages: Maximum number of messages sent to agent per cluster
 
@@ -194,6 +192,11 @@ async def generate_commands_from_data(
 
     # Track statistics
     created_count = 0
+    skipped_count = 0
+    total_clusters = len(cluster_metadata)
+
+    # Create progress counter
+    progress = ProgressCounter(total_clusters, "Processing clusters")
 
     # Process each cluster
     for cluster_meta in cluster_metadata:
@@ -201,26 +204,36 @@ async def generate_commands_from_data(
         messages = cluster_messages.get(cluster_id, [])
 
         if not messages:
+            progress.update()
             continue
 
         # Generate slash command for this cluster
-        was_created = await generate_command_from_cluster(
+        was_created, command_name = await generate_command_from_cluster(
             cluster_id,
             messages,
             commands_dir,
-            quiet=quiet,
             max_message_length=max_message_length,
             max_messages=max_messages,
         )
         if was_created:
             created_count += 1
+        else:
+            skipped_count += 1
+
+        progress.update()
+
+    progress.finish()
+
+    # Print summary of what was generated vs skipped
+    print_verbose(
+        f"  ✓ Created {created_count} commands, ✗ Skipped {skipped_count} (not reusable)"
+    )
 
     return created_count
 
 
 async def generate_commands(
     clusters_dir: Path,
-    quiet: bool = True,
     max_message_length: int = 500,
     max_messages: int = 20,
 ) -> int:
@@ -228,7 +241,6 @@ async def generate_commands(
 
     Args:
         clusters_dir: Directory containing cluster JSON files
-        quiet: If True, suppress verbose output
         max_message_length: Maximum characters per message sent to agent (default: 500)
         max_messages: Maximum number of messages sent to agent per cluster (default: 20)
 
@@ -248,6 +260,11 @@ async def generate_commands(
 
     # Track statistics
     created_count = 0
+    skipped_count = 0
+    total_clusters = len(cluster_files)
+
+    # Create progress counter
+    progress = ProgressCounter(total_clusters, "Processing clusters")
 
     # Process each cluster
     for cluster_file in cluster_files:
@@ -260,19 +277,30 @@ async def generate_commands(
 
         # Guard: Skip empty clusters
         if not messages:
+            progress.update()
             continue
 
         # Generate slash command for this cluster
-        was_created = await generate_command_from_cluster(
+        was_created, command_name = await generate_command_from_cluster(
             cluster_id,
             messages,
             commands_dir,
-            quiet=quiet,
             max_message_length=max_message_length,
             max_messages=max_messages,
         )
         if was_created:
             created_count += 1
+        else:
+            skipped_count += 1
+
+        progress.update()
+
+    progress.finish()
+
+    # Print summary
+    print_verbose(
+        f"  ✓ Created {created_count} commands, ✗ Skipped {skipped_count} (not reusable)"
+    )
 
     return created_count
 
@@ -301,7 +329,7 @@ async def main():
         sys.exit(1)
 
     # Generate commands
-    created_count = await generate_commands(clusters_dir, quiet=False)
+    created_count = await generate_commands(clusters_dir)
 
     if created_count > 0:
         print(f"\nGenerated {created_count} slash command(s)")

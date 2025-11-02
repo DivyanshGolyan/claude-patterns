@@ -17,6 +17,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 import numpy as np
 
+from claude_patterns.output import print_info, print_verbose
+
 
 def load_messages(json_file: Path, limit: Optional[int] = None) -> List[Dict[str, Any]]:
     """Load user messages from JSON file."""
@@ -36,13 +38,6 @@ def compute_embeddings(messages: List[Dict[str, Any]], model_name: str):
     Returns:
         Tuple of (model, embeddings) - model is needed for duplicate filtering
     """
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError:
-        print("Error: sentence-transformers not installed.", file=sys.stderr)
-        print("Install with: pip install sentence-transformers", file=sys.stderr)
-        sys.exit(1)
-
     # Guard: Validate non-empty input
     if not messages:
         print(
@@ -50,14 +45,28 @@ def compute_embeddings(messages: List[Dict[str, Any]], model_name: str):
         )
         sys.exit(1)
 
-    print(f"Loading model: {model_name}...")
+    # Import sentence_transformers (can be slow on first load)
+    print_info("  Initializing embedding model...")
+    import time
+
+    init_start = time.time()
+    try:
+        from sentence_transformers import SentenceTransformer
+    except ImportError:
+        print("Error: sentence-transformers not installed.", file=sys.stderr)
+        print("Install with: pip install sentence-transformers", file=sys.stderr)
+        sys.exit(1)
+    init_time = time.time() - init_start
+    print_verbose(f"  Initialization completed in {init_time:.1f}s")
+
+    print_verbose(f"  Loading model: {model_name}...")
     model = SentenceTransformer(model_name)
 
     texts = [msg["message"] for msg in messages]
-    print(f"Computing embeddings for {len(texts)} messages...")
+    print_info(f"  Computing embeddings for {len(texts)} messages...")
 
     embeddings = model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
-    print(f"Computed embeddings: shape {embeddings.shape}")
+    print_verbose(f"  Computed embeddings: shape {embeddings.shape}")
 
     return model, embeddings
 
@@ -74,7 +83,7 @@ def cluster_messages(
         print("Error: Cannot cluster empty embeddings array", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Clustering with distance threshold {threshold}...")
+    print_verbose(f"  Clustering with distance threshold {threshold}...")
 
     # Compute distance matrix (1 - cosine similarity)
     distance_matrix = cosine_distances(embeddings)
@@ -100,7 +109,7 @@ def cluster_messages(
     clusters = list(clusters_dict.values())
     clusters.sort(key=len, reverse=True)
 
-    print(f"Found {len(clusters)} clusters")
+    print_info(f"  Found {len(clusters)} initial clusters")
 
     return clusters, labels
 
@@ -170,20 +179,22 @@ def filter_duplicate_clusters(
 
     # Guard: Return early if no clusters to process
     if not clusters_data:
-        print("No clusters to filter - skipping duplicate filtering")
+        print_verbose("  No clusters to filter - skipping duplicate filtering")
         return clusters_data
 
     # Load existing commands
     existing_commands = load_existing_commands(commands_dir)
 
     if not existing_commands:
-        print("No existing slash commands found - skipping duplicate filtering")
+        print_verbose(
+            "  No existing slash commands found - skipping duplicate filtering"
+        )
         return clusters_data
 
-    print(
-        f"\nFiltering duplicates against {len(existing_commands)} existing commands..."
+    print_verbose(
+        f"  Filtering duplicates against {len(existing_commands)} existing commands..."
     )
-    print(f"Similarity threshold: {similarity_threshold}")
+    print_verbose(f"  Similarity threshold: {similarity_threshold}")
 
     # Compute embeddings for existing commands
     command_embeddings = model.encode(
@@ -211,15 +222,15 @@ def filter_duplicate_clusters(
 
         if max_sim >= similarity_threshold:
             filtered_count += 1
-            print(
-                f"  Filtered cluster {cluster['cluster_id']} "
+            print_verbose(
+                f"    Filtered cluster {cluster['cluster_id']} "
                 f"(similarity: {max_sim:.3f}): {cluster['representative'][:80]}..."
             )
         else:
             filtered_clusters.append(cluster)
 
-    print(f"Filtered out {filtered_count} duplicate clusters")
-    print(f"Remaining clusters: {len(filtered_clusters)}")
+    print_verbose(f"  Filtered out {filtered_count} duplicate clusters")
+    print_verbose(f"  Remaining clusters: {len(filtered_clusters)}")
 
     return filtered_clusters
 
@@ -262,6 +273,9 @@ def prepare_clusters(
     # Default commands directory
     if commands_dir is None:
         commands_dir = Path.cwd() / ".claude" / "commands"
+
+    # Track filtering stages for pipeline visualization
+    initial_cluster_count = len(clusters)
 
     output = []
     cluster_messages_map = {}  # Map to store full messages for each cluster
@@ -307,10 +321,14 @@ def prepare_clusters(
     # Sort by size descending for Pareto analysis
     output.sort(key=lambda x: x["size"], reverse=True)
 
+    # Track size after first filtering (min_size and word_count)
+    after_size_filter = len(output)
+
     # Filter duplicates against existing slash commands
     output = filter_duplicate_clusters(
         output, model, commands_dir, similarity_threshold
     )
+    after_duplicate_filter = len(output)
 
     # Apply Pareto principle: keep clusters accounting for 80% of messages
     total_messages = sum(c["size"] for c in output)
@@ -337,11 +355,32 @@ def prepare_clusters(
         # Map messages with new cluster ID
         final_cluster_messages[idx] = cluster_messages_map[old_id]
 
-    print(f"Prepared {len(pareto_clusters)} clusters")
-    print(f"  Filtered out: {len(output) - len(pareto_clusters)} low-volume clusters")
+    # Show filtering pipeline funnel
+    print_info("\n  Cluster filtering pipeline:")
+    print_info(f"    {initial_cluster_count} initial clusters")
+
+    size_filtered = initial_cluster_count - after_size_filter
+    if size_filtered > 0:
+        print_info(
+            f"    → {after_size_filter} after size filtering (-{size_filtered} too small or short)"
+        )
+
+    duplicate_filtered = after_size_filter - after_duplicate_filter
+    if duplicate_filtered > 0:
+        print_info(
+            f"    → {after_duplicate_filter} after duplicate filtering (-{duplicate_filtered} similar to existing)"
+        )
+
+    pareto_filtered = after_duplicate_filter - len(pareto_clusters)
+    if pareto_filtered > 0:
+        print_info(
+            f"    → {len(pareto_clusters)} after Pareto filtering (-{pareto_filtered} low-volume)"
+        )
+
     if total_messages > 0:
-        print(
-            f"  Coverage: {cumulative_messages}/{total_messages} messages ({cumulative_messages / total_messages * 100:.1f}%)"
+        coverage_pct = cumulative_messages / total_messages * 100
+        print_info(
+            f"\n  Coverage: {cumulative_messages}/{total_messages} messages ({coverage_pct:.1f}%)"
         )
 
     return pareto_clusters, final_cluster_messages
